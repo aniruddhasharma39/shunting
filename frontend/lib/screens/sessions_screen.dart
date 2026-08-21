@@ -187,20 +187,13 @@ class _SessionsScreenState extends State<SessionsScreen> {
                 ),
                 const SizedBox(height: 12),
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Icon(Icons.location_on_outlined, size: 16, color: AppTheme.subtitleColor),
                     const SizedBox(width: 4),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("${session['yard']} • ${session['line']}", style: const TextStyle(fontSize: 12, color: AppTheme.subtitleColor)),
-                          if (session['exactLocation'] != null && session['exactLocation'] != 'Unknown')
-                            Text("Loc: ${session['exactLocation']} | Pit: ${session['pitLane'] ?? 'N/A'}", style: const TextStyle(fontSize: 12, color: AppTheme.subtitleColor, fontWeight: FontWeight.w500)),
-                        ],
-                      ),
-                    ),
+                    if (session['exactLocation'] != null && session['exactLocation'] != 'Unknown')
+                      Text("Loc: ${session['exactLocation']} | Pit: ${session['pitLane'] ?? 'N/A'}", style: const TextStyle(fontSize: 12, color: AppTheme.subtitleColor, fontWeight: FontWeight.w500))
+                    else
+                      Text("${session['yard']} • ${session['line']}", style: const TextStyle(fontSize: 12, color: AppTheme.subtitleColor)),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -285,9 +278,10 @@ class _SessionsScreenState extends State<SessionsScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text("${session['yard']} • ${session['line']}", style: const TextStyle(fontSize: 12, color: AppTheme.subtitleColor)),
                 if (session['exactLocation'] != null && session['exactLocation'] != 'Unknown')
-                  Text("Loc: ${session['exactLocation']} | Pit: ${session['pitLane'] ?? 'N/A'}", style: const TextStyle(fontSize: 12, color: AppTheme.subtitleColor, fontWeight: FontWeight.w500)),
+                  Text("Loc: ${session['exactLocation']} | Pit: ${session['pitLane'] ?? 'N/A'}", style: const TextStyle(fontSize: 12, color: AppTheme.subtitleColor, fontWeight: FontWeight.w500))
+                else
+                  Text("${session['yard']} • ${session['line']}", style: const TextStyle(fontSize: 12, color: AppTheme.subtitleColor)),
                 const SizedBox(height: 4),
                 Text("Holder: ${session['holder']}", style: const TextStyle(fontSize: 12, color: AppTheme.subtitleColor)),
               ],
