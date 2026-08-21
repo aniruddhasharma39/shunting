@@ -1,0 +1,1 @@
+require('dotenv').config(); const db = require('./config/db'); db.query('SELECT id FROM users LIMIT 1').then(res => db.query('INSERT INTO device_assignments (device_id, employee_id) VALUES ($1, $2)', ['ee7d38dc-615a-4b4f-8b84-15cf158396eb', res.rows[0].id])).then(() => { console.log('Done'); process.exit(); }).catch(e => console.error(e));

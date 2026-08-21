@@ -31,6 +31,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     final usersResult = await ApiService.fetchUsers();
     final yardsResult = await ApiService.fetchYards();
 
+    if (!mounted) return;
     setState(() {
       _isLoading = false;
       if (usersResult['success']) {

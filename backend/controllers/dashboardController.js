@@ -86,6 +86,7 @@ const getDashboardSummary = async (req, res) => {
     const liveSessionsQuery = `
         SELECT 
             da.id, 
+            da.device_id,
             d.device_code as ld_device, 
             'DE-MOCK' as de_device, 
             da.issued_at, 
@@ -102,22 +103,37 @@ const getDashboardSummary = async (req, res) => {
     `;
     const liveSessionsRes = await db.query(liveSessionsQuery, params);
     
-    // Map live sessions to the frontend UI format
-    const liveSessions = liveSessionsRes.rows.map(session => {
-        // --- MOCK IoT DATA INJECTION ---
-        const dummyDistance = (Math.random() * 50 + 10).toFixed(1); // 10.0 to 60.0 meters
-        const isClosing = dummyDistance < 20; // Mark red if under 20m
+    // Fetch real telemetry data for the active sessions
+    const liveSessions = [];
+    for (let session of liveSessionsRes.rows) {
+        // Get the latest telemetry for this device
+        const telemetryRes = await db.query(
+            'SELECT payload FROM telemetry_data WHERE device_id = $1 ORDER BY recorded_at DESC LIMIT 1',
+            [session.device_id]
+        );
         
-        return {
+        let realDistance = '--m';
+        let isClosing = false;
+        
+        if (telemetryRes.rows.length > 0) {
+            const payload = telemetryRes.rows[0].payload;
+            realDistance = payload.distance_show || (payload.distance ? payload.distance + 'm' : '--m');
+            
+            // If distance is less than 20m, mark as closing
+            const numDistance = parseFloat(payload.distance || payload.distance_show || 999);
+            isClosing = numDistance < 20;
+        }
+        
+        liveSessions.push({
             id: session.id,
             yard: session.yard_name,
             line: session.line_name,
             ldDevice: session.ld_device,
             deDevice: session.de_device,
-            distance: `${dummyDistance}m`, 
+            distance: realDistance, 
             isClosing: isClosing
-        };
-    });
+        });
+    }
 
     // If there are no live sessions in DB, return empty list (no mock data)
     res.json({
