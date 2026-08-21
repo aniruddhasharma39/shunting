@@ -19,6 +19,32 @@ class _ReportsScreenState extends State<ReportsScreen> {
   bool _hasRunReport = false;
   
   List<dynamic> _results = [];
+  List<dynamic> _yards = [];
+  List<dynamic> _employees = [];
+  String? _selectedYardId;
+  String? _selectedLineId;
+  String? _selectedEmployeeId;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchFilterData();
+  }
+
+  Future<void> _fetchFilterData() async {
+    final yardsRes = await ApiService.fetchYards();
+    if (yardsRes['success']) {
+      setState(() {
+        _yards = yardsRes['data'];
+      });
+    }
+    final usersRes = await ApiService.fetchUsers();
+    if (usersRes['success']) {
+      setState(() {
+        _employees = usersRes['data'];
+      });
+    }
+  }
 
   final List<String> _timeTabs = ['Daily', 'Weekly', 'Monthly'];
   final List<String> _reportTypes = [
@@ -259,13 +285,87 @@ class _ReportsScreenState extends State<ReportsScreen> {
     };
   }
 
+  Widget _buildDropdown({
+    required String label,
+    required String? value,
+    required List<DropdownMenuItem<String>> items,
+    required void Function(String?) onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: AppTheme.subtitleColor)),
+        const SizedBox(height: 4),
+        DropdownButtonFormField<String>(
+          isExpanded: true,
+          decoration: InputDecoration(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: AppTheme.borderColor),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: AppTheme.borderColor),
+            ),
+          ),
+          value: value,
+          icon: const Icon(Icons.keyboard_arrow_down, size: 16, color: AppTheme.subtitleColor),
+          items: items,
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+
   Widget _buildFilterPanel() {
     List<Widget> activeFilters = [];
     
-    if (_showFilter('Yard')) activeFilters.add(_buildFilterDropdown('Yard', 'All Yards'));
-    if (_showFilter('Employee')) activeFilters.add(_buildFilterDropdown('Employee', 'Search...'));
+    if (_showFilter('Yard')) {
+      activeFilters.add(_buildDropdown(
+        label: 'Yard',
+        value: _selectedYardId,
+        items: _yards.map((y) => DropdownMenuItem<String>(
+          value: y['id'].toString(),
+          child: Text(y['yard_name'] ?? 'Unknown', style: const TextStyle(fontSize: 14, color: AppTheme.primaryColor)),
+        )).toList(),
+        onChanged: (val) {
+          setState(() {
+            _selectedYardId = val;
+            _selectedLineId = null;
+          });
+        }
+      ));
+    }
+
+    if (_showFilter('Employee')) {
+      activeFilters.add(_buildDropdown(
+        label: 'Employee',
+        value: _selectedEmployeeId,
+        items: _employees.map((e) => DropdownMenuItem<String>(
+          value: e['id'].toString(),
+          child: Text(e['name'] ?? 'Unknown', style: const TextStyle(fontSize: 14, color: AppTheme.primaryColor)),
+        )).toList(),
+        onChanged: (val) => setState(() => _selectedEmployeeId = val),
+      ));
+    }
+
     if (_showFilter('Device Type')) activeFilters.add(_buildFilterDropdown('Device Type', 'All Types'));
-    if (_showFilter('Line')) activeFilters.add(_buildFilterDropdown('Line', 'All Lines'));
+
+    if (_showFilter('Line')) {
+      final selectedYard = _yards.firstWhere((y) => y['id'].toString() == _selectedYardId, orElse: () => null);
+      final lines = (selectedYard != null && selectedYard['lines'] != null) ? (selectedYard['lines'] as List) : [];
+      activeFilters.add(_buildDropdown(
+        label: 'Line',
+        value: _selectedLineId,
+        items: lines.map((l) => DropdownMenuItem<String>(
+          value: l['id'].toString(),
+          child: Text(l['line_name'] ?? 'Unknown', style: const TextStyle(fontSize: 14, color: AppTheme.primaryColor)),
+        )).toList(),
+        onChanged: (val) => setState(() => _selectedLineId = val),
+      ));
+    }
+
     if (_showFilter('Device Health')) activeFilters.add(_buildFilterDropdown('Device Health', 'Any Status'));
 
     List<Widget> dynamicRows = [];
@@ -393,10 +493,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _downloadReport(String format) async {
     try {
       final dates = _getDateRange();
+      
+      final yardName = _yards.firstWhere((y) => y['id'].toString() == _selectedYardId, orElse: () => null)?['yard_name'] ?? 'All Yards';
+      
+      final selectedYard = _yards.firstWhere((y) => y['id'].toString() == _selectedYardId, orElse: () => null);
+      final lines = (selectedYard != null && selectedYard['lines'] != null) ? (selectedYard['lines'] as List) : [];
+      final lineName = lines.firstWhere((l) => l['id'].toString() == _selectedLineId, orElse: () => null)?['line_name'] ?? 'All Lines';
+      
+      final employeeName = _employees.firstWhere((e) => e['id'].toString() == _selectedEmployeeId, orElse: () => null)?['name'] ?? 'All Employees';
+
       final filters = <String, String>{
         'Date Range': "${dates['from']} to ${dates['to']}",
-        'Yard': 'All Yards'
+        'Yard': yardName,
+        'Line': lineName,
+        'Employee': employeeName,
+        'fromDate': dates['from']!,
+        'toDate': dates['to']!,
       };
+      
+      if (_selectedYardId != null) filters['yardId'] = _selectedYardId!;
+      if (_selectedLineId != null) filters['lineId'] = _selectedLineId!;
+      if (_selectedEmployeeId != null) filters['employeeId'] = _selectedEmployeeId!;
       
       final queryParams = {
         'reportType': _selectedReportType,
