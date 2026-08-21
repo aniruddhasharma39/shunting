@@ -7,7 +7,7 @@ import 'login_screen.dart';
 import 'device_inventory_screen.dart';
 import 'sessions_screen.dart';
 import 'issue_return_screen.dart';
-import 'reports_screen.dart';
+// import 'reports_screen.dart';
 import 'profile_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -689,9 +689,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             value: healthData['systemStatus']?.toString() ?? 'Unknown', 
             icon: Icons.check_circle_outline, 
             color: Colors.green,
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const ReportsScreen()));
-            },
+            onTap: () {},
           ),
         ],
       ),

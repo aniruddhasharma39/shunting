@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/user_session.dart';
 import 'dashboard_screen.dart';
-import 'reports_screen.dart';
+// import 'reports_screen.dart';
 import 'user_management_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/sessions_screen.dart';
@@ -21,7 +21,7 @@ class _MainScreenState extends State<MainScreen> {
     final session = UserSession();
     final screens = <Widget>[
       const DashboardScreen(),
-      const ReportsScreen(),
+      // const ReportsScreen(),
       const SessionsScreen(),
     ];
 
@@ -43,11 +43,11 @@ class _MainScreenState extends State<MainScreen> {
         activeIcon: Icon(Icons.home),
         label: 'Home',
       ),
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.bar_chart),
-        activeIcon: Icon(Icons.bar_chart),
-        label: 'Reports',
-      ),
+      // const BottomNavigationBarItem(
+      //   icon: Icon(Icons.bar_chart),
+      //   activeIcon: Icon(Icons.bar_chart),
+      //   label: 'Reports',
+      // ),
       const BottomNavigationBarItem(
         icon: Icon(Icons.history_outlined),
         activeIcon: Icon(Icons.history),
