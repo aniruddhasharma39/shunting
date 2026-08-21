@@ -9,6 +9,7 @@ const getSessions = async (req, res) => {
     let queryStr = `
         SELECT 
             da.id, 
+            da.device_id,
             d.device_code as ld_device, 
             'DE-MOCK' as de_device, 
             da.issued_at, 
@@ -47,37 +48,49 @@ const getSessions = async (req, res) => {
     const sessions = await db.query(queryStr, queryParams);
     
     // Map data for frontend
-    const mappedSessions = sessions.rows.map(s => {
+    const mappedSessions = [];
+    for (let s of sessions.rows) {
         const isLive = s.returned_at === null;
         
-        // --- MOCK IoT DATA INJECTION ---
-        let distanceVal = 'N/A';
-        let isClosing = false;
-        
+        let queryParamsT = [s.device_id];
+        let queryStrT = `SELECT payload FROM telemetry_data WHERE device_id = $1`;
         if (isLive) {
-            const dummyDistance = (Math.random() * 50 + 10).toFixed(1); // 10.0 to 60.0
-            distanceVal = `${dummyDistance}m`;
-            isClosing = dummyDistance < 20;
+            queryStrT += ` ORDER BY recorded_at DESC LIMIT 1`;
         } else {
-            // For history, show final dummy stopping distance
-            distanceVal = `${(Math.random() * 15 + 5).toFixed(1)}m (Final)`;
+            queryParamsT.push(s.returned_at);
+            queryStrT += ` AND recorded_at <= $2 ORDER BY recorded_at DESC LIMIT 1`;
         }
 
-        return {
+        const telemetryRes = await db.query(queryStrT, queryParamsT);
+        let exactLocation = 'Unknown';
+        let pitLane = 'N/A';
+        let distance = '0m';
+
+        if (telemetryRes.rows.length > 0) {
+            const payload = telemetryRes.rows[0].payload;
+            if (payload) {
+                exactLocation = payload.location || exactLocation;
+                pitLane = payload.pit_lane || pitLane;
+                distance = payload.distance_show || payload.distance || distance;
+            }
+        }
+
+        mappedSessions.push({
             id: s.id,
-            yard: s.yard_name,
-            line: s.line_name,
             ldDevice: s.ld_device,
             deDevice: s.de_device,
-            distance: distanceVal, 
-            holder: s.holder_name,
             startTime: s.issued_at,
             endTime: s.returned_at,
-            duration: s.returned_at ? 'Completed' : 'Active',
-            status: s.returned_at ? 'Finished' : 'In Progress',
-            isClosing: isClosing
-        };
-    });
+            holder: s.holder_name,
+            line: s.line_name,
+            yard: s.yard_name,
+            remarks: s.remarks,
+            status: isLive ? 'live' : 'history',
+            exactLocation: exactLocation,
+            pitLane: pitLane,
+            distance: distance,
+        });
+    }
 
     res.json(mappedSessions);
   } catch (error) {

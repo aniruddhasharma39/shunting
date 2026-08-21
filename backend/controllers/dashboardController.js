@@ -115,9 +115,15 @@ const getDashboardSummary = async (req, res) => {
         let realDistance = '--m';
         let isClosing = false;
         
+        let exactLocation = session.yard_name;
+        let pitLane = session.line_name;
+
         if (telemetryRes.rows.length > 0) {
             const payload = telemetryRes.rows[0].payload;
             realDistance = payload.distance_show || (payload.distance ? payload.distance + 'm' : '--m');
+            
+            if (payload.location) exactLocation = payload.location;
+            if (payload.pit_lane) pitLane = payload.pit_lane;
             
             // If distance is less than 20m, mark as closing
             const numDistance = parseFloat(payload.distance || payload.distance_show || 999);
@@ -126,8 +132,8 @@ const getDashboardSummary = async (req, res) => {
         
         liveSessions.push({
             id: session.id,
-            yard: session.yard_name,
-            line: session.line_name,
+            yard: exactLocation,
+            line: pitLane,
             ldDevice: session.ld_device,
             deDevice: session.de_device,
             distance: realDistance, 

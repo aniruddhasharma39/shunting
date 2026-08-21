@@ -480,11 +480,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
     }
 
-    return SizedBox(
-      height: 120,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Column(
         children: liveSessions.map<Widget>((sessionData) => _buildLiveGlowingCard(
           context: context,
           yard: sessionData['yard'] ?? 'Unknown',
@@ -493,7 +491,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           deDevice: sessionData['deDevice'] ?? 'DE',
           distance: sessionData['distance'] ?? '--m',
           isClosing: sessionData['isClosing'] ?? false,
-          isExpanded: false,
+          isExpanded: true,
         )).toList(),
       ),
     );
