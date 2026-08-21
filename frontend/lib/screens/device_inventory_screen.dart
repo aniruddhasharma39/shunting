@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_drawer.dart';
 import '../services/api_service.dart';
+import 'live_telemetry_screen.dart';
 
 class DeviceInventoryScreen extends StatefulWidget {
   const DeviceInventoryScreen({super.key});
@@ -152,76 +153,89 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
         final device = devices[index];
         final isOnline = device['network_status'] == 'Online';
         
-        return Card(
-          margin: const EdgeInsets.only(bottom: 16.0),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: 2,
-          shadowColor: Colors.black.withValues(alpha: 0.1),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          device['device_type'] == 'Dead-End' ? Icons.vertical_align_bottom : Icons.memory,
-                          color: AppTheme.primaryColor,
-                          size: 24,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          device['device_code'] ?? 'Unknown',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isOnline ? Colors.green.shade50 : Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: isOnline ? Colors.green.shade200 : Colors.red.shade200),
-                      ),
-                      child: Row(
+        return InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => LiveTelemetryScreen(
+                  deviceId: device['id'].toString(),
+                  deviceCode: device['device_code'],
+                ),
+              ),
+            );
+          },
+          child: Card(
+            margin: const EdgeInsets.only(bottom: 16.0),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 2,
+            shadowColor: Colors.black.withValues(alpha: 0.1),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
                         children: [
-                          Container(
-                            width: 8, height: 8,
-                            decoration: BoxDecoration(
-                              color: isOnline ? Colors.green : Colors.red,
-                              shape: BoxShape.circle,
-                            ),
+                          Icon(
+                            device['device_type'] == 'Dead-End' ? Icons.vertical_align_bottom : Icons.memory,
+                            color: AppTheme.primaryColor,
+                            size: 24,
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 8),
                           Text(
-                            isOnline ? 'Online' : 'Offline',
-                            style: TextStyle(color: isOnline ? Colors.green.shade700 : Colors.red.shade700, fontSize: 12, fontWeight: FontWeight.bold),
+                            device['device_code'] ?? 'Unknown',
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(child: _buildInfoItem('Type', device['device_type'] ?? 'N/A')),
-                    Expanded(child: _buildInfoItem('Battery', device['battery_level'] ?? '--')),
-                    Expanded(child: _buildInfoItem('Condition', device['condition_status'] ?? 'Unknown')),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(child: _buildInfoItem('SIM Status', device['sim_status'] ?? 'N/A')),
-                    Expanded(child: _buildInfoItem('Line ID', device['assigned_line_id'] != null ? 'Assigned' : 'Unassigned')),
-                    Expanded(child: _buildInfoItem('Heartbeat', device['last_heartbeat'] != null ? _formatDate(device['last_heartbeat']) : 'Never')),
-                  ],
-                ),
-              ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isOnline ? Colors.green.shade50 : Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: isOnline ? Colors.green.shade200 : Colors.red.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 8, height: 8,
+                              decoration: BoxDecoration(
+                                color: isOnline ? Colors.green : Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              isOnline ? 'Online' : 'Offline',
+                              style: TextStyle(color: isOnline ? Colors.green.shade700 : Colors.red.shade700, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: _buildInfoItem('Type', device['device_type'] ?? 'N/A')),
+                      Expanded(child: _buildInfoItem('Battery', device['battery_level'] ?? '--')),
+                      Expanded(child: _buildInfoItem('Condition', device['condition_status'] ?? 'Unknown')),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: _buildInfoItem('SIM Status', device['sim_status'] ?? 'N/A')),
+                      Expanded(child: _buildInfoItem('Line ID', device['assigned_line_id'] != null ? 'Assigned' : 'Unassigned')),
+                      Expanded(child: _buildInfoItem('Heartbeat', device['last_heartbeat'] != null ? _formatDate(device['last_heartbeat']) : 'Never')),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         );

@@ -309,7 +309,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               borderSide: const BorderSide(color: AppTheme.borderColor),
             ),
           ),
-          value: value,
+          initialValue: value,
           icon: const Icon(Icons.keyboard_arrow_down, size: 16, color: AppTheme.subtitleColor),
           items: items,
           onChanged: onChanged,

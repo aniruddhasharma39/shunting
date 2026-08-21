@@ -5,7 +5,7 @@ const db = require('../config/db');
 // @access  Public (or secured via API Key in production)
 const ingestTelemetry = async (req, res) => {
   try {
-    const { device_id, distance, battery, speed, timestamp } = req.body;
+    const { device_id, distance, battery, speed, timestamp, signal, distance_show, location, pit_lane, device_number } = req.body;
 
     if (!device_id) {
       return res.status(400).json({ message: 'device_id is required' });
@@ -15,7 +15,12 @@ const ingestTelemetry = async (req, res) => {
     const payload = {
         distance,
         battery,
-        speed
+        speed,
+        signal,
+        distance_show,
+        location,
+        pit_lane,
+        device_number
     };
     const recordedAt = timestamp ? new Date(timestamp) : new Date();
 
@@ -47,6 +52,26 @@ const ingestTelemetry = async (req, res) => {
   }
 };
 
+// @desc    Get top 20 latest telemetry records for a device
+// @route   GET /api/iot/telemetry/:device_id
+// @access  Public (or secured)
+const getTelemetryAudit = async (req, res) => {
+  try {
+    const { device_id } = req.params;
+
+    const result = await db.query(
+      'SELECT id, payload, recorded_at FROM telemetry_data WHERE device_id = $1 ORDER BY recorded_at DESC LIMIT 20',
+      [device_id]
+    );
+
+    res.status(200).json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error in getTelemetryAudit:', error);
+    res.status(500).json({ success: false, message: 'Server error fetching telemetry audit' });
+  }
+};
+
 module.exports = {
-  ingestTelemetry
+  ingestTelemetry,
+  getTelemetryAudit
 };

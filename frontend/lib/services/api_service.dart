@@ -377,4 +377,15 @@ class ApiService {
   }
 
 
+  static Future<Map<String, dynamic>> fetchTelemetryAudit(String deviceId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/iot/telemetry/$deviceId'), headers: _authHeaders());
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'success': true, 'data': data['data'] ?? []};
+      return {'success': false, 'message': data['message'] ?? 'Failed to load telemetry audit'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error.'};
+    }
+  }
+
 }
