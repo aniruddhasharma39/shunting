@@ -127,7 +127,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     items: availableYards.map((y) {
                       return DropdownMenuItem<String>(
                         value: y['id']?.toString(),
-                        child: Text('${y['yard_name']} (${y['yard_code']})'),
+                        child: Text('${y['yard_name']}${y['location'] != null && y['location'].toString().isNotEmpty ? ' (${y['location']})' : ''}'),
                       );
                     }).toList(),
                     onChanged: (value) {

@@ -3,8 +3,6 @@ import 'package:http/http.dart' as http;
 import 'user_session.dart';
 
 class ApiService {
-  // Use 10.0.2.2 for Android emulator to access local host, or localhost for web/desktop
-  // Use the PC's local IP address instead of localhost for physical device testing
   static const String baseUrl = 'https://shuntting-safety-device.onrender.com/api';
 
   /// Get auth headers with Bearer token
