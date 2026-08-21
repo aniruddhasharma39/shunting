@@ -26,7 +26,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final session = UserSession();
-      final request = http.MultipartRequest('POST', Uri.parse('http://localhost:5000/api/auth/profile/picture'));
+      final request = http.MultipartRequest('POST', Uri.parse('https://shuntting-safety-device.onrender.com/api/auth/profile/picture'));
       request.headers['Authorization'] = 'Bearer ${session.token}';
       
       final bytes = await image.readAsBytes();
@@ -64,7 +64,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final session = UserSession();
       final response = await http.delete(
-        Uri.parse('http://localhost:5000/api/auth/profile/picture'),
+        Uri.parse('https://shuntting-safety-device.onrender.com/api/auth/profile/picture'),
         headers: {
           'Authorization': 'Bearer ${session.token}',
         },
@@ -133,7 +133,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                       image: session.profilePicUrl != null
                           ? DecorationImage(
-                              image: NetworkImage('http://localhost:5000${session.profilePicUrl}'),
+                              image: NetworkImage('https://shuntting-safety-device.onrender.com${session.profilePicUrl}'),
                               fit: BoxFit.cover,
                             )
                           : null,
