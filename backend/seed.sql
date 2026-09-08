@@ -1,10 +1,10 @@
 -- Dummy Data Seed Script for SafeShunt AWS PostgreSQL
 
 -- 1. Insert Yards (Hardcoding UUIDs so we can reference them below)
-INSERT INTO yards (id, yard_name, location, status) VALUES 
-('11111111-1111-1111-1111-111111111111', 'North Yard', 'Sector A', 'Active'),
-('22222222-2222-2222-2222-222222222222', 'South Yard', 'Sector B', 'Active')
-ON CONFLICT DO NOTHING;
+INSERT INTO yards (id, yard_code, yard_name, station, division, zone, status) VALUES 
+('11111111-1111-1111-1111-111111111111', 'NY-01', 'North Yard', 'Sector A', 'Div 1', 'Zone 1', 'Active'),
+('22222222-2222-2222-2222-222222222222', 'SY-01', 'South Yard', 'Sector B', 'Div 1', 'Zone 1', 'Active')
+ON CONFLICT (id) DO NOTHING;
 
 -- 2. Insert Yard Lines
 INSERT INTO yard_lines (id, yard_id, line_code, line_name, line_type, status) VALUES 
