@@ -388,4 +388,146 @@ class ApiService {
     }
   }
 
+  // DEVICE REGISTRY (HARDWARE CONSOLE / AWS IOT)
+  static Future<Map<String, dynamic>> fetchDeviceRegistry({
+    String? search,
+    String? productType,
+    String? healthStatus,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (search != null && search.trim().isNotEmpty) {
+        queryParams['search'] = search.trim();
+      }
+      if (productType != null && productType != 'ALL') {
+        queryParams['product_type'] = productType;
+      }
+      if (healthStatus != null && healthStatus != 'ALL') {
+        queryParams['health_status'] = healthStatus;
+      }
+
+      final uri = Uri.parse('$baseUrl/device-registry').replace(queryParameters: queryParams.isEmpty ? null : queryParams);
+      final response = await http.get(uri, headers: _authHeaders());
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'summary': data['summary'] ?? {},
+          'data': data['devices'] ?? [],
+          'count': data['count'] ?? 0,
+        };
+      }
+      return {'success': false, 'message': data['message'] ?? 'Failed to load device registry'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error connecting to Device Registry.'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> fetchDeviceRegistryDetail(String deviceId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/device-registry/$deviceId'),
+        headers: _authHeaders(),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': data};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Failed to load device details'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error.'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> upsertDeviceRegistry(Map<String, dynamic> payload) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/device-registry'),
+        headers: _authHeaders(),
+        body: jsonEncode(payload),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return {'success': true, 'data': data['device']};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Failed to save device'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error.'};
+    }
+  }
+
+  /// Delete device from device_registry and device_telemetry
+  static Future<Map<String, dynamic>> deleteDeviceRegistry(String deviceId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/device-registry/$deviceId'),
+        headers: _authHeaders(),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': data['message']};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Failed to delete device'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error deleting device.'};
+    }
+  }
+
+  /// Fetch Live Telemetry stream (from device_telemetry table with topic support)
+  static Future<Map<String, dynamic>> fetchLiveTelemetry({
+    String? deviceId,
+    String? topic,
+    int limit = 60,
+  }) async {
+    try {
+      final queryParams = <String, String>{
+        'limit': limit.toString(),
+      };
+      if (deviceId != null && deviceId.trim().isNotEmpty && deviceId != 'ALL') {
+        queryParams['device_id'] = deviceId.trim();
+      }
+      if (topic != null && topic.trim().isNotEmpty) {
+        queryParams['topic'] = topic.trim();
+      }
+
+      final uri = Uri.parse('$baseUrl/device-registry/telemetry/live').replace(queryParameters: queryParams);
+      final response = await http.get(uri, headers: _authHeaders());
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'count': data['count'] ?? 0,
+          'activeDevicesCount': data['activeDevicesCount'] ?? 0,
+          'devicesList': data['devicesList'] ?? [],
+          'data': data['telemetry'] ?? [],
+        };
+      }
+      return {'success': false, 'message': data['message'] ?? 'Failed to load live telemetry'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error connecting to Live Telemetry stream.'};
+    }
+  }
+
+
+  /// Ingest Telemetry record (for test simulator or direct uplink)
+  static Future<Map<String, dynamic>> ingestDeviceTelemetry(Map<String, dynamic> payload) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/device-registry/telemetry'),
+        headers: _authHeaders(),
+        body: jsonEncode(payload),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return {'success': true, 'data': data['data']};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Failed to ingest telemetry'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error.'};
+    }
+  }
+
 }
+

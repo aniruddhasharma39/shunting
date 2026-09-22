@@ -46,8 +46,15 @@ class _DEAssignmentScreenState extends State<DEAssignmentScreen> {
       }
 
       if (devicesResult['success']) {
-         _devices = devicesResult['data'] as List<dynamic>;
-         _unassignedDeadEnds = _devices.where((d) => d['device_type'] == 'Dead-End' && d['assigned_line_id'] == null).toList();
+        _devices = devicesResult['data'] as List<dynamic>;
+        _unassignedDeadEnds = _devices.where((d) {
+          final type = (d['device_type'] ?? d['product_type'] ?? '').toString().toUpperCase();
+          final pType = (d['product_type'] ?? '').toString().toUpperCase();
+          final code = (d['device_code'] ?? d['device_id'] ?? '').toString().toUpperCase();
+          final isDeadEnd = type.contains('DEAD') || type.contains('TRANSMITTER') || pType.contains('TRANSMITTER') || code.startsWith('TX') || code.startsWith('DE') || code.contains('TRANSMITTER');
+          final isUnassigned = d['assigned_line_id'] == null || d['assigned_line_id'].toString().trim().isEmpty;
+          return isDeadEnd && isUnassigned;
+        }).toList();
       }
 
       setState(() => _isLoading = false);
@@ -295,7 +302,7 @@ class _DEAssignmentScreenState extends State<DEAssignmentScreen> {
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         isExpanded: true,
-                        value: selectedDeviceId,
+                        value: (selectedDeviceId != null && _unassignedDeadEnds.any((d) => d['id'].toString() == selectedDeviceId)) ? selectedDeviceId : null,
                         hint: const Text('Select a device'),
                         items: _unassignedDeadEnds.map((d) {
                           return DropdownMenuItem<String>(value: d['id'].toString(), child: Text(d['device_code']));

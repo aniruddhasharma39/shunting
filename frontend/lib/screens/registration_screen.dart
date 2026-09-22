@@ -23,6 +23,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final List<String> _designations = [
     'Super Administrator',
     'Yard Administrator',
+    'Hardware Engineer',
+    'Maintenance User',
     'Viewer / Control Room User'
   ];
 
@@ -169,7 +171,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 hintText: 'Select position',
               ),
               icon: const Icon(Icons.keyboard_arrow_down),
-              initialValue: _selectedDesignation,
+              initialValue: (_selectedDesignation != null && _designations.contains(_selectedDesignation)) ? _selectedDesignation : null,
               items: _designations.map((String value) {
                 return DropdownMenuItem<String>(
                   value: value,

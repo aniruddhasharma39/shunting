@@ -31,22 +31,28 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
 
     if (mounted) {
       if (devicesResult['success']) {
-         final allDevices = devicesResult['data'] as List<dynamic>;
-         // LD units that are NOT in an active session (issued)
-         _availableLDs = allDevices.where((d) => d['device_type'] == 'Loco Unit').toList();
+        final allDevices = devicesResult['data'] as List<dynamic>;
+        // Filter for Receivers / Loco Units
+        _availableLDs = allDevices.where((d) {
+          final type = (d['device_type'] ?? d['product_type'] ?? '').toString().toUpperCase();
+          final pType = (d['product_type'] ?? '').toString().toUpperCase();
+          final code = (d['device_code'] ?? d['device_id'] ?? '').toString().toUpperCase();
+          final isReceiver = type.contains('RECEIVER') || type.contains('LOCO') || pType.contains('RECEIVER') || code.startsWith('RX') || code.startsWith('LD') || code.contains('RECEIVER');
+          return isReceiver;
+        }).toList();
       }
       
       if (usersResult['success']) {
-         final allUsers = usersResult['data'] as List<dynamic>;
-         _locoPilots = allUsers.where((u) => u['role'] == 'viewer' || u['role'] == 'yard_admin').toList();
+        final allUsers = usersResult['data'] as List<dynamic>;
+        _locoPilots = allUsers.where((u) => u['role'] == 'viewer' || u['role'] == 'yard_admin' || u['role'] == 'maintenance_user' || u['role'] == 'hardware_engineer').toList();
       }
 
       if (sessionsResult['success']) {
-         _activeSessions = sessionsResult['data'] as List<dynamic>;
-         
-         // Filter out available LDs that are already in active sessions
-         final activeLDCodes = _activeSessions.map((s) => s['ldDevice']).toList();
-         _availableLDs.removeWhere((d) => activeLDCodes.contains(d['device_code']));
+        _activeSessions = sessionsResult['data'] as List<dynamic>;
+        
+        // Filter out available LDs that are already in active sessions
+        final activeLDCodes = _activeSessions.map((s) => s['ldDevice']?.toString()).where((c) => c != null).toSet();
+        _availableLDs.removeWhere((d) => activeLDCodes.contains(d['device_code']?.toString()) || activeLDCodes.contains(d['device_id']?.toString()));
       }
 
       setState(() => _isLoading = false);
@@ -116,17 +122,39 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
               const Text('Select an available LD unit and assign it to a shunter or loco pilot for the shift.', style: TextStyle(color: AppTheme.subtitleColor)),
               const SizedBox(height: 24),
               
-              _buildDropdownLabel('Select Available LD Unit'),
+              _buildDropdownLabel('Select Available Loco Unit (Receiver)'),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.borderColor)),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     isExpanded: true,
-                    value: selectedDeviceId,
-                    hint: const Text('Select a device'),
+                    value: (selectedDeviceId != null && _availableLDs.any((d) => d['id'].toString() == selectedDeviceId)) ? selectedDeviceId : null,
+                    hint: const Text('Select a Loco Unit (Receiver)'),
                     items: _availableLDs.map((d) {
-                      return DropdownMenuItem<String>(value: d['id'].toString(), child: Text(d['device_code']));
+                      final code = d['device_code'] ?? d['device_id'] ?? 'LD';
+                      final type = d['device_type'] ?? 'Loco Unit';
+                      final batt = d['battery_level'] ?? '95%';
+                      final status = d['network_status'] ?? 'Online';
+                      return DropdownMenuItem<String>(
+                        value: d['id'].toString(),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.train, size: 18, color: AppTheme.primaryColor),
+                            const SizedBox(width: 8),
+                            Text('$code ($type)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text('🔋 $batt • $status', style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                        ),
+                      );
                     }).toList(),
                     onChanged: (val) {
                       setTabState(() => selectedDeviceId = val);
@@ -136,17 +164,31 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
               ),
               const SizedBox(height: 16),
               
-              _buildDropdownLabel('Select Employee (Loco Pilot)'),
+              _buildDropdownLabel('Select Employee (Loco Pilot / Shunter)'),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.borderColor)),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     isExpanded: true,
-                    value: selectedUserId,
-                    hint: const Text('Select an employee'),
+                    value: (selectedUserId != null && _locoPilots.any((u) => u['id'].toString() == selectedUserId)) ? selectedUserId : null,
+                    hint: const Text('Select a Loco Pilot'),
                     items: _locoPilots.map((u) {
-                      return DropdownMenuItem<String>(value: u['id'].toString(), child: Text("${u['fullName'] ?? u['full_name']} (${u['employeeId'] ?? u['employee_id']})"));
+                      final name = u['fullName'] ?? u['full_name'] ?? 'User';
+                      final empId = u['employeeId'] ?? u['employee_id'] ?? 'EMP';
+                      final desig = u['designation'] ?? 'Loco Pilot';
+                      return DropdownMenuItem<String>(
+                        value: u['id'].toString(),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.person, size: 18, color: Colors.blueGrey),
+                            const SizedBox(width: 8),
+                            Text('$name ($empId)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                            const Spacer(),
+                            Text(desig, style: const TextStyle(fontSize: 12, color: AppTheme.subtitleColor)),
+                          ],
+                        ),
+                      );
                     }).toList(),
                     onChanged: (val) {
                       setTabState(() => selectedUserId = val);

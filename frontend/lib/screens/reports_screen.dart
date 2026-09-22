@@ -291,6 +291,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     required List<DropdownMenuItem<String>> items,
     required void Function(String?) onChanged,
   }) {
+    final bool isValueValid = value != null && items.any((i) => i.value == value);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -309,7 +311,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               borderSide: const BorderSide(color: AppTheme.borderColor),
             ),
           ),
-          initialValue: value,
+          initialValue: isValueValid ? value : null,
           icon: const Icon(Icons.keyboard_arrow_down, size: 16, color: AppTheme.subtitleColor),
           items: items,
           onChanged: onChanged,

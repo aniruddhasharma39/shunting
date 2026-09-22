@@ -127,6 +127,15 @@ class AppDrawer extends StatelessWidget {
               destination: const SessionsScreen(),
             ),
 
+          // Device Inventory (Real IoT Registry & Telemetry) - Super Admin, Yard Admin, Hardware Engineer, Maintenance
+          if (session.canManageDevices)
+            _buildDrawerItem(
+              context: context,
+              icon: Icons.inventory_2_outlined,
+              title: 'Device Inventory',
+              destination: const DeviceInventoryScreen(),
+            ),
+
           // Yard & Line Setup - Super Admin only
           if (session.canConfigureYards)
             _buildDrawerItem(
@@ -136,17 +145,8 @@ class AppDrawer extends StatelessWidget {
               destination: const YardSetupScreen(),
             ),
 
-          // Device Inventory - Super Admin and Yard Admin
-          if (session.canManageDevices)
-            _buildDrawerItem(
-              context: context,
-              icon: Icons.inventory_2_outlined,
-              title: 'Device Inventory',
-              destination: const DeviceInventoryScreen(),
-            ),
-
           // DE Line Assignments - Super Admin and Yard Admin
-          if (session.canManageDevices)
+          if (session.isSuperAdmin || session.isYardAdmin)
             _buildDrawerItem(
               context: context,
               icon: Icons.linear_scale,
@@ -185,6 +185,8 @@ class AppDrawer extends StatelessWidget {
         return const Color(0xFFDC2626); // Red for super admin
       case UserSession.roleYardAdmin:
         return const Color(0xFF2563EB); // Blue for yard admin
+      case UserSession.roleHardwareEngineer:
+        return const Color(0xFF0284C7); // Sky blue for hardware engineer
       case UserSession.roleMaintenanceUser:
         return const Color(0xFFD97706); // Amber for maintenance
       case UserSession.roleViewer:

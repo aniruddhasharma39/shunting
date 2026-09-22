@@ -35,8 +35,15 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
       }
       
       if (devicesResult['success']) {
-         final allDevices = devicesResult['data'] as List<dynamic>;
-         _unassignedDeadEnds = allDevices.where((d) => d['device_type'] == 'Dead-End' && d['assigned_line_id'] == null).toList();
+        final allDevices = devicesResult['data'] as List<dynamic>;
+        _unassignedDeadEnds = allDevices.where((d) {
+          final type = (d['device_type'] ?? d['product_type'] ?? '').toString().toUpperCase();
+          final pType = (d['product_type'] ?? '').toString().toUpperCase();
+          final code = (d['device_code'] ?? d['device_id'] ?? '').toString().toUpperCase();
+          final isDeadEnd = type.contains('DEAD') || type.contains('TRANSMITTER') || pType.contains('TRANSMITTER') || code.startsWith('TX') || code.startsWith('DE') || code.contains('TRANSMITTER');
+          final isUnassigned = d['assigned_line_id'] == null || d['assigned_line_id'].toString().trim().isEmpty;
+          return isDeadEnd && isUnassigned;
+        }).toList();
       }
 
       setState(() => _isLoading = false);

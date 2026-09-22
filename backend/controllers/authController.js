@@ -9,6 +9,7 @@ const designationToRole = {
   'Super Administrator': 'super_admin',
   'Yard Administrator': 'yard_admin',
   'Maintenance User': 'maintenance_user',
+  'Hardware Engineer': 'hardware_engineer',
   'Viewer / Control Room User': 'viewer',
 };
 
