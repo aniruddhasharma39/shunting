@@ -39,10 +39,10 @@ const getYards = async (req, res) => {
       `, [req.user.id]);
       
       lines = await db.query(`
-        SELECT yl.*, COALESCE(dr.device_id, d.device_code) as assigned_de 
+        SELECT yl.*, COALESCE(d.device_code, dr.device_id) as assigned_de, d.id as assigned_device_id 
         FROM yard_lines yl 
+        LEFT JOIN devices d ON d.assigned_line_id = yl.id AND (d.device_type = 'Dead-End' OR d.device_code ILIKE 'TX%' OR d.device_code ILIKE 'DE%')
         LEFT JOIN device_registry dr ON dr.assigned_line_id = yl.id AND (dr.product_type ILIKE '%TRANSMITTER%' OR dr.device_id ILIKE 'TX%' OR dr.device_id ILIKE 'DE%')
-        LEFT JOIN devices d ON d.assigned_line_id = yl.id
         JOIN user_yard_assignments uya ON yl.yard_id = uya.yard_id
         WHERE uya.user_id = $1
         ORDER BY yl.created_at DESC
@@ -50,10 +50,10 @@ const getYards = async (req, res) => {
     } else {
       yards = await db.query('SELECT * FROM yards ORDER BY created_at DESC');
       lines = await db.query(`
-        SELECT yl.*, COALESCE(dr.device_id, d.device_code) as assigned_de 
+        SELECT yl.*, COALESCE(d.device_code, dr.device_id) as assigned_de, d.id as assigned_device_id 
         FROM yard_lines yl 
+        LEFT JOIN devices d ON d.assigned_line_id = yl.id AND (d.device_type = 'Dead-End' OR d.device_code ILIKE 'TX%' OR d.device_code ILIKE 'DE%')
         LEFT JOIN device_registry dr ON dr.assigned_line_id = yl.id AND (dr.product_type ILIKE '%TRANSMITTER%' OR dr.device_id ILIKE 'TX%' OR dr.device_id ILIKE 'DE%')
-        LEFT JOIN devices d ON d.assigned_line_id = yl.id
         ORDER BY yl.created_at DESC
       `);
     }

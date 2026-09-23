@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
 import '../widgets/app_drawer.dart';
 import '../services/api_service.dart';
 
@@ -36,7 +35,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
   void _startLiveTimer() {
     _liveRefreshTimer?.cancel();
     if (_autoRefresh) {
-      _liveRefreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      _liveRefreshTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) {
         if (mounted) {
           _fetchLiveSessions(silent: true);
         }
@@ -56,8 +55,13 @@ class _SessionsScreenState extends State<SessionsScreen> {
     final result = await ApiService.fetchSessions(status: 'live');
     if (mounted) {
       if (result['success']) {
+        final newLive = result['data'] ?? [];
+        // If an active session disconnected/ended, trigger history refresh immediately
+        if (_liveSessions.isNotEmpty && newLive.isEmpty) {
+          _fetchHistorySessions();
+        }
         setState(() {
-          _liveSessions = result['data'] ?? [];
+          _liveSessions = newLive;
           _isLoadingLive = false;
         });
       } else {
@@ -487,7 +491,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                             child: _buildInfoTile(
                               icon: Icons.access_time,
                               iconColor: Colors.tealAccent,
-                              label: 'Shift Started',
+                              label: 'Connection Time',
                               value: _formatTime(session['startTime']),
                             ),
                           ),
@@ -529,6 +533,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
       itemCount: _historySessions.length,
       itemBuilder: (context, index) {
         final session = _historySessions[index];
+        final duration = session['duration'] ?? '--';
 
         return Container(
           margin: const EdgeInsets.only(bottom: 14.0),
@@ -537,84 +542,228 @@ class _SessionsScreenState extends State<SessionsScreen> {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.white12),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        session['session_code'] ?? 'SES-HIST',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.cyanAccent, fontSize: 12),
-                      ),
-                    ),
-                    Text(
-                      _formatDate(session['startTime']),
-                      style: const TextStyle(color: Colors.white60, fontSize: 12),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _buildHistoryDeviceTag(session['ldDevice'] ?? 'RX', Icons.train, Colors.lightBlueAccent),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Icon(Icons.arrow_forward, size: 14, color: Colors.white38),
-                    ),
-                    _buildHistoryDeviceTag(session['deDevice'] ?? 'TX', Icons.sensors, Colors.amberAccent),
-                    const Spacer(),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        const Text('Final Placement', style: TextStyle(fontSize: 10, color: Colors.white38)),
-                        Text(
-                          session['distance'] ?? 'N/A',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent, fontSize: 16),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const Divider(height: 24, color: Colors.white10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => _showSessionSummaryDialog(session),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Icon(Icons.person_outline, size: 14, color: Colors.white60),
-                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.cyanAccent.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.check_circle, color: Colors.cyanAccent, size: 12),
+                              const SizedBox(width: 4),
+                              Text(
+                                session['session_code'] ?? 'SES-HIST',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.cyanAccent, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
                         Text(
-                          'Pilot: ${session['holder'] ?? 'N/A'}',
-                          style: const TextStyle(fontSize: 12, color: Colors.white70),
+                          _formatDate(session['startTime']),
+                          style: const TextStyle(color: Colors.white60, fontSize: 12),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
                     Row(
                       children: [
-                        const Icon(Icons.access_time, size: 14, color: Colors.white60),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${_formatTime(session['startTime'])} - ${_formatTime(session['endTime'])}',
-                          style: const TextStyle(fontSize: 12, color: Colors.white60),
+                        _buildHistoryDeviceTag(session['ldDevice'] ?? 'RX', Icons.train, Colors.lightBlueAccent),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Icon(Icons.sync_alt, size: 14, color: Colors.white38),
+                        ),
+                        _buildHistoryDeviceTag(session['deDevice'] ?? 'TX', Icons.sensors, Colors.amberAccent),
+                        const Spacer(),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text('Final Placement', style: TextStyle(fontSize: 10, color: Colors.white38)),
+                            Text(
+                              session['finalPlacement'] ?? session['distance'] ?? 'N/A',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent, fontSize: 16),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24, color: Colors.white10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.person_outline, size: 14, color: Colors.white60),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Pilot: ${session['holder'] ?? 'N/A'}',
+                              style: const TextStyle(fontSize: 12, color: Colors.white70),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            const Icon(Icons.timer_outlined, size: 14, color: Colors.white60),
+                            const SizedBox(width: 4),
+                            Text(
+                              duration != '--' ? duration : '${_formatTime(session['startTime'])} - ${_formatTime(session['endTime'])}',
+                              style: const TextStyle(fontSize: 12, color: Colors.white60),
+                            ),
+                            const SizedBox(width: 6),
+                            const Icon(Icons.chevron_right, size: 16, color: Colors.white38),
+                          ],
                         ),
                       ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
         );
       },
+    );
+  }
+
+  void _showSessionSummaryDialog(dynamic session) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Colors.cyanAccent, width: 1.5),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.cyanAccent.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.summarize, color: Colors.cyanAccent, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Session Summary', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                  Text(session['session_code'] ?? 'SES-COMPLETED', style: const TextStyle(color: Colors.cyanAccent, fontSize: 12)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. Pairing Hud
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Column(
+                      children: [
+                        const Text('RECEIVER (LOCO)', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.train, color: Colors.lightBlueAccent, size: 16),
+                            const SizedBox(width: 4),
+                            Text(session['ldDevice'] ?? 'RX', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const Icon(Icons.sync_alt, color: Colors.cyanAccent, size: 18),
+                    Column(
+                      children: [
+                        const Text('TRANSMITTER (DE)', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.sensors, color: Colors.amberAccent, size: 16),
+                            const SizedBox(width: 4),
+                            Text(session['deDevice'] ?? 'TX', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // 2. Metrics summary
+              _buildSummaryRow('Final Placement Distance', session['finalPlacement'] ?? session['distance'] ?? '--', isHighlight: true),
+              _buildSummaryRow('Min Proximity Reached', session['minDistance'] ?? session['distance'] ?? '--'),
+              _buildSummaryRow('Operation Duration', session['duration'] ?? '--'),
+              _buildSummaryRow('Connection Time', _formatTime(session['startTime'])),
+              _buildSummaryRow('Disconnection Time', _formatTime(session['endTime'])),
+              _buildSummaryRow('Assigned Yard', session['yard'] ?? 'North Yard'),
+              _buildSummaryRow('Track / Pit Line', session['line'] ?? 'Main Shunt Line'),
+              _buildSummaryRow('Loco Pilot / Holder', session['holder'] ?? 'ian'),
+              _buildSummaryRow('Status at End', session['status'] ?? 'Completed'),
+              if (session['remarks'] != null && session['remarks'].toString().isNotEmpty)
+                _buildSummaryRow('Close Reason', session['remarks'].toString()),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('CLOSE', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value, {bool isHighlight = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          Flexible(
+            child: Text(
+              value,
+              style: TextStyle(
+                color: isHighlight ? Colors.greenAccent : Colors.white,
+                fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
+                fontSize: isHighlight ? 14 : 12,
+              ),
+              textAlign: TextAlign.end,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -729,7 +878,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
 
   Color _getSafetyColor(String status, dynamic distanceM) {
     if (distanceM != null) {
-      final d = Number(distanceM);
+      final d = _parseNum(distanceM);
       if (d < 5.0) return const Color(0xFFEF4444); // Red Hazard
       if (d <= 20.0) return const Color(0xFFF59E0B); // Amber Warning
       return const Color(0xFF10B981); // Green Safe
@@ -751,7 +900,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
     }
   }
 
-  num Number(dynamic val) {
+  num _parseNum(dynamic val) {
     if (val is num) return val;
     return num.tryParse(val.toString()) ?? 0;
   }

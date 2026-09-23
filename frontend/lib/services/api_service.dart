@@ -64,7 +64,7 @@ class ApiService {
 
       if (response.statusCode == 200) {
         // Store user session data (role, assigned yards, token)
-        UserSession().setFromLoginResponse(data);
+        await UserSession().setFromLoginResponse(data);
         return {'success': true, 'data': data};
       } else {
         return {'success': false, 'message': data['message'] ?? 'Login failed'};

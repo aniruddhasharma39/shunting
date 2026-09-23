@@ -156,10 +156,10 @@ exports.handler = async (event, context) => {
       }
     }
 
-    // 4. Distance Telemetry Point from TX
-    if (distanceCm !== null && deviceId.startsWith('TX')) {
+    // 4. Distance Telemetry Point from TX or RX
+    if (distanceCm !== null) {
       const point = JSON.stringify({ t: event.cloud_timestamp || Date.now(), d_cm: distanceCm });
-      await client.query(`
+      const updateRes = await client.query(`
         UPDATE shunting_sessions
         SET 
           distance_trajectory = COALESCE(distance_trajectory, '[]'::jsonb) || $1::jsonb,
@@ -167,8 +167,21 @@ exports.handler = async (event, context) => {
           final_placement_distance = $2 / 100.0,
           minimum_distance = LEAST(COALESCE(minimum_distance, $2 / 100.0), $2 / 100.0),
           updated_at = NOW()
-        WHERE (tx_device_id = $3 OR de_code = $3) AND (status = 'LIVE' OR session_status = 'LIVE')
+        WHERE (tx_device_id = $3 OR de_code = $3 OR rx_device_id = $3 OR ld_code = $3)
+          AND (status = 'LIVE' OR session_status = 'LIVE')
       `, [point, distanceCm, deviceId]);
+
+      if (updateRes.rowCount === 0 && deviceId.startsWith('TX')) {
+        const defaultRx = 'RX-01';
+        const sessionCode = `SES-${Date.now().toString().slice(-6)}-${defaultRx}`;
+        await client.query(`
+          INSERT INTO shunting_sessions (
+            session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
+            session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
+            minimum_distance, distance_trajectory, created_at, updated_at
+          ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4, $4 / 100.0, $4 / 100.0, $5::jsonb, NOW(), NOW())
+        `, [sessionCode, defaultRx, deviceId, distanceCm, JSON.stringify([JSON.parse(point)])]);
+      }
     }
 
     await client.end();

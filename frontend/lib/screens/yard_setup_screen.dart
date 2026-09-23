@@ -40,9 +40,7 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
           final type = (d['device_type'] ?? d['product_type'] ?? '').toString().toUpperCase();
           final pType = (d['product_type'] ?? '').toString().toUpperCase();
           final code = (d['device_code'] ?? d['device_id'] ?? '').toString().toUpperCase();
-          final isDeadEnd = type.contains('DEAD') || type.contains('TRANSMITTER') || pType.contains('TRANSMITTER') || code.startsWith('TX') || code.startsWith('DE') || code.contains('TRANSMITTER');
-          final isUnassigned = d['assigned_line_id'] == null || d['assigned_line_id'].toString().trim().isEmpty;
-          return isDeadEnd && isUnassigned;
+          return type.contains('DEAD') || type.contains('TRANSMITTER') || pType.contains('TRANSMITTER') || code.startsWith('TX') || code.startsWith('DE') || code.contains('TRANSMITTER');
         }).toList();
       }
 
@@ -485,7 +483,14 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
   }
 
   void _showAssignForm(dynamic line) {
-    String? selectedDeviceId;
+    String? selectedDeviceId = line['assigned_device_id']?.toString();
+    if (selectedDeviceId == null && line['assigned_de'] != null) {
+      final matched = _unassignedDeadEnds.firstWhere(
+        (d) => d['device_code'] == line['assigned_de'],
+        orElse: () => null,
+      );
+      if (matched != null) selectedDeviceId = matched['id'].toString();
+    }
     bool isSubmitting = false;
 
     showModalBottomSheet(
@@ -511,7 +516,7 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                   ),
                   const Divider(),
                   const SizedBox(height: 16),
-                  const Text('Select Unassigned Dead-End Device', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.subtitleColor)),
+                  const Text('Select Transmitter / Dead-End Device', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.subtitleColor)),
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -523,10 +528,19 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                       child: DropdownButton<String>(
                         isExpanded: true,
                         value: selectedDeviceId,
-                        hint: const Text('Select a device'),
-                        items: _unassignedDeadEnds.map((d) {
-                          return DropdownMenuItem<String>(value: d['id'].toString(), child: Text(d['device_code']));
-                        }).toList(),
+                        hint: const Text('Select a transmitter'),
+                        items: [
+                          const DropdownMenuItem<String>(
+                            value: 'unassign',
+                            child: Text('None (Unassign)', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                          ),
+                          ..._unassignedDeadEnds.map((d) {
+                            return DropdownMenuItem<String>(
+                              value: d['id'].toString(),
+                              child: Text("${d['device_code']} (${d['device_type'] ?? 'Dead-End'})"),
+                            );
+                          }),
+                        ],
                         onChanged: (val) {
                           setModalState(() => selectedDeviceId = val);
                         },
@@ -539,7 +553,14 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                     child: ElevatedButton(
                       onPressed: isSubmitting || selectedDeviceId == null ? null : () async {
                         setModalState(() => isSubmitting = true);
-                        final result = await ApiService.assignDeviceToLine(selectedDeviceId!, line['id']);
+                        Map<String, dynamic> result;
+                        if (selectedDeviceId == 'unassign') {
+                          // Unassign device from line
+                          final currentDevId = line['assigned_device_id'] ?? selectedDeviceId;
+                          result = await ApiService.assignDeviceToLine(currentDevId.toString(), null);
+                        } else {
+                          result = await ApiService.assignDeviceToLine(selectedDeviceId!, line['id']);
+                        }
                         if (mounted) {
                            if (result['success']) {
                               Navigator.pop(context);

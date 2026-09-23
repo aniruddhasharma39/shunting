@@ -204,8 +204,6 @@ class AwsIotBridge {
 
   async processSessionAndPersist(deviceId, topic, payload, battery, signal, lat, lng, distanceCm, speedKmh) {
     try {
-      const now = new Date();
-
       // 1. Insert into device_telemetry
       await db.query(`
         INSERT INTO device_telemetry (
@@ -223,35 +221,57 @@ class AwsIotBridge {
         speedKmh
       ]);
 
-      // 2. Upsert into device_registry
+      // 2. Upsert into device_registry and capture hardware/firmware specs and sensor configuration
       const productType = deviceId.startsWith('TX') ? 'TRANSMITTER' : (deviceId.startsWith('RX') ? 'RECEIVER' : 'DEVICE');
-      await db.query(`
-        INSERT INTO device_registry (
-          device_id, device_name, serial_number, product_type, hardware_version, firmware_version, health_status, last_reading_timestamp, created_at, updated_at
-        ) VALUES (
-          $1, $1, $1, $2, '1.0', '1.0.0', 'ONLINE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-        )
-        ON CONFLICT (device_id) DO UPDATE SET
-          health_status = 'ONLINE',
-          last_reading_timestamp = CURRENT_TIMESTAMP,
-          updated_at = CURRENT_TIMESTAMP
-      `, [deviceId, productType]);
+      const hwVer = payload.hardware_version || payload.hw_version || payload.deviceConfig?.hw_version || '1.0';
+      const fwVer = payload.firmware_version || payload.fw_version || payload.deviceConfig?.fw_version || '2.0.0';
+      const sensorsConfig = payload.sensors_config || payload.sensors || payload.deviceConfig?.sensors || null;
+
+      if (sensorsConfig && Array.isArray(sensorsConfig) && sensorsConfig.length > 0) {
+        await db.query(`
+          INSERT INTO device_registry (
+            device_id, device_name, serial_number, product_type, hardware_version, firmware_version, sensors_config, health_status, last_reading_timestamp, created_at, updated_at
+          ) VALUES (
+            $1, $1, $1, $2, $3, $4, $5::jsonb, 'ONLINE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+          )
+          ON CONFLICT (device_id) DO UPDATE SET
+            health_status = 'ONLINE',
+            hardware_version = COALESCE(NULLIF($3, '1.0'), device_registry.hardware_version),
+            firmware_version = COALESCE(NULLIF($4, '1.0.0'), device_registry.firmware_version),
+            sensors_config = $5::jsonb,
+            last_reading_timestamp = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        `, [deviceId, productType, hwVer, fwVer, JSON.stringify(sensorsConfig)]);
+      } else {
+        await db.query(`
+          INSERT INTO device_registry (
+            device_id, device_name, serial_number, product_type, hardware_version, firmware_version, health_status, last_reading_timestamp, created_at, updated_at
+          ) VALUES (
+            $1, $1, $1, $2, $3, $4, 'ONLINE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+          )
+          ON CONFLICT (device_id) DO UPDATE SET
+            health_status = 'ONLINE',
+            hardware_version = COALESCE(NULLIF($3, '1.0'), device_registry.hardware_version),
+            firmware_version = COALESCE(NULLIF($4, '1.0.0'), device_registry.firmware_version),
+            last_reading_timestamp = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        `, [deviceId, productType, hwVer, fwVer]);
+      }
 
       // =========================================================================
-      // 3. HARDWARE SESSION & PAIRING STATE MACHINE (devices/RX-XX/status)
+      // 3. HARDWARE SESSION & PAIRING STATE MACHINE (devices/RX-XX/status or telemetry)
       // =========================================================================
       if (topic.includes('/status')) {
         const eventType = payload.event; // 'PAIR_START', 'PAIR_END', 'UNEXPECTED_DISCONNECT'
         const status = payload.status;   // 'PAIRED', 'IDLE', 'OFFLINE'
-        const pairedTxId = payload.paired_tx_id;
+        const pairedTxId = payload.paired_tx_id || (deviceId.startsWith('RX') ? 'TX-01' : 'RX-01');
         const lastDistCm = payload.last_distance_cm ?? distanceCm;
         const finalDistCm = payload.final_distance_cm;
 
-        // A. Pairing Initiated (PAIR_START or PAIRED with paired_tx_id)
-        if ((eventType === 'PAIR_START' || status === 'PAIRED') && pairedTxId) {
+        // A. Pairing Initiated (PAIR_START or PAIRED)
+        if (eventType === 'PAIR_START' || status === 'PAIRED') {
           const sessionCode = `SES-${Date.now().toString().slice(-6)}-${deviceId}`;
           
-          // Check if already active
           const existing = await db.query(
             "SELECT id FROM shunting_sessions WHERE (rx_device_id = $1 OR ld_code = $1) AND (status = 'LIVE' OR session_status = 'LIVE')",
             [deviceId]
@@ -266,7 +286,6 @@ class AwsIotBridge {
             `, [sessionCode, deviceId, pairedTxId]);
             console.log(`🚂 [SHUTTLE SESSION START] Hardware Paired: ${deviceId} <--> ${pairedTxId} (Code: ${sessionCode})`);
           } else if (lastDistCm != null) {
-            // Append distance point to trajectory
             const point = JSON.stringify({ t: Date.now(), d_cm: lastDistCm });
             await db.query(`
               UPDATE shunting_sessions
@@ -282,7 +301,8 @@ class AwsIotBridge {
 
         // B. Pairing Ended (PAIR_END or IDLE)
         else if (eventType === 'PAIR_END' || status === 'IDLE') {
-          const finalVal = finalDistCm ?? lastDistCm ?? 0;
+          const finalVal = parseInt(finalDistCm ?? lastDistCm ?? 0, 10);
+          const finalMeters = finalVal / 100.0;
           await db.query(`
             UPDATE shunting_sessions
             SET 
@@ -291,10 +311,20 @@ class AwsIotBridge {
               session_status = 'COMPLETED',
               status = 'COMPLETED',
               final_distance_cm = $1,
-              final_placement_distance = $1 / 100.0,
+              final_placement_distance = $2,
               updated_at = NOW()
-            WHERE (rx_device_id = $2 OR ld_code = $2) AND (status = 'LIVE' OR session_status = 'LIVE')
-          `, [finalVal, deviceId]);
+            WHERE (rx_device_id = $3 OR ld_code = $3 OR tx_device_id = $3 OR de_code = $3) AND (status = 'LIVE' OR session_status = 'LIVE')
+          `, [finalVal, finalMeters, deviceId]);
+
+          // Also finalize any open device assignment for this device
+          try {
+            await db.query(`
+              UPDATE device_assignments
+              SET returned_at = NOW()
+              WHERE device_id IN (SELECT id FROM devices WHERE device_code = $1) AND returned_at IS NULL
+            `, [deviceId]);
+          } catch (_) {}
+
           console.log(`🛑 [SHUTTLE SESSION END] Hardware Unpaired: ${deviceId} (Final Distance: ${finalVal} cm)`);
         }
 
@@ -309,18 +339,29 @@ class AwsIotBridge {
               status = 'TIMED_OUT',
               manual_close_reason = 'Hardware Unexpected Disconnect / LWT',
               updated_at = NOW()
-            WHERE (rx_device_id = $1 OR ld_code = $1) AND (status = 'LIVE' OR session_status = 'LIVE')
+            WHERE (rx_device_id = $1 OR ld_code = $1 OR tx_device_id = $1 OR de_code = $1) AND (status = 'LIVE' OR session_status = 'LIVE')
           `, [deviceId]);
+
+          try {
+            await db.query(`
+              UPDATE device_assignments
+              SET returned_at = NOW()
+              WHERE device_id IN (SELECT id FROM devices WHERE device_code = $1) AND returned_at IS NULL
+            `, [deviceId]);
+          } catch (_) {}
+
           console.log(`⚠️ [SHUTTLE SESSION TIMEOUT] LWT Disconnect for: ${deviceId}`);
         }
       }
 
       // =========================================================================
-      // 4. ACTIVE DISTANCE DECAY LOGGING FROM TRANSMITTER (devices/TX-XX/telemetry)
+      // 4. ACTIVE DISTANCE TELEMETRY LOGGING FROM TRANSMITTER OR RECEIVER
       // =========================================================================
-      if (distanceCm !== null && deviceId.startsWith('TX')) {
+      if (distanceCm !== null) {
         const point = JSON.stringify({ t: Date.now(), d_cm: distanceCm });
-        await db.query(`
+        
+        // Update existing live session if active
+        const updateRes = await db.query(`
           UPDATE shunting_sessions
           SET 
             distance_trajectory = COALESCE(distance_trajectory, '[]'::jsonb) || $1::jsonb,
@@ -328,12 +369,55 @@ class AwsIotBridge {
             final_placement_distance = $2 / 100.0,
             minimum_distance = LEAST(COALESCE(minimum_distance, $2 / 100.0), $2 / 100.0),
             updated_at = NOW()
-          WHERE (tx_device_id = $3 OR de_code = $3) AND (status = 'LIVE' OR session_status = 'LIVE')
+          WHERE (tx_device_id = $3 OR de_code = $3 OR rx_device_id = $3 OR ld_code = $3)
+            AND (status = 'LIVE' OR session_status = 'LIVE')
         `, [point, distanceCm, deviceId]);
+
+        // If no active shunting session exists yet, auto-create one when distance streaming begins
+        if (updateRes.rowCount === 0 && deviceId.startsWith('TX')) {
+          const defaultRx = 'RX-01';
+          const sessionCode = `SES-${Date.now().toString().slice(-6)}-${defaultRx}`;
+          await db.query(`
+            INSERT INTO shunting_sessions (
+              session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
+              session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
+              minimum_distance, distance_trajectory, created_at, updated_at
+            ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4, $4 / 100.0, $4 / 100.0, $5::jsonb, NOW(), NOW())
+          `, [sessionCode, defaultRx, deviceId, distanceCm, JSON.stringify([JSON.parse(point)])]);
+          console.log(`🚂 [SHUTTLE SESSION AUTO-START] Streaming from ${deviceId} <--> ${defaultRx}`);
+        }
       }
 
     } catch (err) {
       console.error('[DB Persist Error]:', err.message);
+    }
+  }
+
+  // Periodic sweep to automatically mark stale live sessions as completed
+  async sweepStaleSessions() {
+    try {
+      const staleThresholdSeconds = 45;
+      const res = await db.query(`
+        UPDATE shunting_sessions
+        SET 
+          session_end = updated_at,
+          end_time = updated_at,
+          session_status = 'COMPLETED',
+          status = 'COMPLETED',
+          manual_close_reason = 'Hardware disconnected (no telemetry for > 45s)',
+          updated_at = NOW()
+        WHERE (status = 'LIVE' OR session_status = 'LIVE')
+          AND updated_at < (NOW() - INTERVAL '45 SECONDS')
+        RETURNING id, session_code, ld_code, tx_device_id;
+      `);
+
+      if (res.rows.length > 0) {
+        for (const s of res.rows) {
+          console.log(`⏱️ [AUTO-SESSION CLOSE] Session ${s.session_code} (${s.ld_code} <-> ${s.tx_device_id}) marked COMPLETED after disconnect.`);
+        }
+      }
+    } catch (err) {
+      // Non-fatal background error
     }
   }
 
@@ -354,6 +438,17 @@ class AwsIotBridge {
     });
   }
 
+  // Fast in-memory lookup for zero-latency mobile telemetry
+  getLatestTelemetryForDevices(deviceIds) {
+    if (!deviceIds || !deviceIds.length) return null;
+    for (const pkt of this.recentPackets) {
+      if (deviceIds.includes(pkt.device_id)) {
+        return pkt;
+      }
+    }
+    return null;
+  }
+
   subscribeLiveStream(callback) {
     this.subscribers.add(callback);
     return () => this.subscribers.delete(callback);
@@ -361,4 +456,10 @@ class AwsIotBridge {
 }
 
 const instance = new AwsIotBridge();
+
+// Run stale session sweep every 15 seconds
+setInterval(() => {
+  instance.sweepStaleSessions();
+}, 15000);
+
 module.exports = instance;

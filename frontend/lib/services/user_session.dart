@@ -1,5 +1,9 @@
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+
 /// Global user session state for the logged-in user.
-/// Stores role, assigned yards, and user info after login.
+/// Stores role, assigned yards, and user info after login,
+/// persisted to SharedPreferences so page reloads do not log out.
 class UserSession {
   // Singleton pattern
   static final UserSession _instance = UserSession._internal();
@@ -24,10 +28,12 @@ class UserSession {
   static const String roleHardwareEngineer = 'hardware_engineer';
   static const String roleViewer = 'viewer';
 
+  static const String _prefKeySession = 'user_session_cache_v1';
+
   /// Initialize session from login API response
-  void setFromLoginResponse(Map<String, dynamic> data) {
-    final user = data['user'];
-    id = user['id'];
+  Future<void> setFromLoginResponse(Map<String, dynamic> data) async {
+    final user = data['user'] ?? {};
+    id = user['id']?.toString();
     fullName = user['fullName'];
     employeeId = user['employeeId'];
     email = user['email'];
@@ -44,10 +50,65 @@ class UserSession {
     } else {
       assignedYards = [];
     }
+
+    await saveToPreferences();
+  }
+
+  /// Save current session to persistent storage
+  Future<void> saveToPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final map = {
+        'id': id,
+        'fullName': fullName,
+        'employeeId': employeeId,
+        'email': email,
+        'designation': designation,
+        'role': role,
+        'token': token,
+        'profilePicUrl': profilePicUrl,
+        'assignedYards': assignedYards,
+      };
+      await prefs.setString(_prefKeySession, jsonEncode(map));
+    } catch (_) {
+      // Ignore storage errors in restricted contexts
+    }
+  }
+
+  /// Restore session from persistent storage
+  Future<bool> loadFromPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_prefKeySession);
+      if (raw == null || raw.isEmpty) return false;
+
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      if (map['token'] == null || map['id'] == null) return false;
+
+      id = map['id']?.toString();
+      fullName = map['fullName'];
+      employeeId = map['employeeId'];
+      email = map['email'];
+      designation = map['designation'];
+      role = map['role'] ?? roleViewer;
+      token = map['token'];
+      profilePicUrl = map['profilePicUrl'];
+
+      if (map['assignedYards'] != null && map['assignedYards'] is List) {
+        assignedYards = List<Map<String, dynamic>>.from(
+          (map['assignedYards'] as List).map((y) => Map<String, dynamic>.from(y)),
+        );
+      } else {
+        assignedYards = [];
+      }
+      return isLoggedIn;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Clear session on logout
-  void clear() {
+  Future<void> clear() async {
     id = null;
     fullName = null;
     employeeId = null;
@@ -57,6 +118,11 @@ class UserSession {
     token = null;
     profilePicUrl = null;
     assignedYards = [];
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefKeySession);
+    } catch (_) {}
   }
 
   // Role check helpers

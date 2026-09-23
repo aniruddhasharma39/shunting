@@ -135,7 +135,7 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
     });
   }
 
-  Future<void> _confirmDeleteDevice(BuildContext context, dynamic device) async {
+  Future<void> _confirmDeleteDevice(dynamic device) async {
     final deviceId = device['device_id'] ?? device['device_code'] ?? 'Unknown';
     final confirmed = await showDialog<bool>(
       context: context,
@@ -195,40 +195,39 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
       ),
     );
 
-    if (confirmed == true && mounted) {
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+            const SizedBox(width: 12),
+            Text('Deleting $deviceId...'),
+          ],
+        ),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+
+    final res = await ApiService.deleteDeviceRegistry(deviceId.toString());
+    if (!mounted) return;
+    if (res['success']) {
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Row(
-            children: [
-              const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
-              const SizedBox(width: 12),
-              Text('Deleting $deviceId...'),
-            ],
-          ),
-          duration: const Duration(seconds: 1),
+          content: Text(res['message'] ?? 'Device deleted successfully'),
+          backgroundColor: Colors.green,
         ),
       );
-
-      final res = await ApiService.deleteDeviceRegistry(deviceId.toString());
-      if (mounted) {
-        if (res['success']) {
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(res['message'] ?? 'Device deleted successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          _fetchInventory();
-        } else {
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(res['message'] ?? 'Failed to delete device'),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
-        }
-      }
+      _fetchInventory();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message'] ?? 'Failed to delete device'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
     }
   }
 
@@ -804,23 +803,99 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                       style: TextStyle(color: Colors.white38, fontSize: 12),
                     )
                   else
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
+                    Column(
                       children: sensors.map<Widget>((s) {
-                        final sName = s['name'] ?? s['sensor_name'] ?? 'Sensor';
-                        final sType = s['type'] ?? s['sensor_type'] ?? '';
-                        final pin = s['pin'] != null ? ' (Pin ${s['pin']})' : '';
+                        final sName = s['sensorName'] ?? s['sensor_name'] ?? s['name'] ?? s['sensorId'] ?? 'Sensor';
+                        final sType = s['sensorType'] ?? s['sensor_type'] ?? s['type'] ?? 'Onboard Sensor';
+                        final mfr = s['manufacturer'] ?? s['mfr'] ?? '';
+                        final purpose = s['purpose'] ?? '';
+                        final pin = s['pin'] != null ? 'Pin ${s['pin']}' : '';
+                        final params = s['parameters'] is List ? (s['parameters'] as List) : [];
+
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
                             color: const Color(0xFF0F172A),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.25)),
                           ),
-                          child: Text(
-                            '$sName ($sType)$pin',
-                            style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10, fontWeight: FontWeight.w500),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.sensors, size: 14, color: Color(0xFF38BDF8)),
+                                        const SizedBox(width: 6),
+                                        Flexible(
+                                          child: Text(
+                                            sName.toString(),
+                                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      sType.toString(),
+                                      style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (purpose.toString().isNotEmpty || mfr.toString().isNotEmpty || pin.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  [
+                                    if (mfr.toString().isNotEmpty) 'Mfr: $mfr',
+                                    if (purpose.toString().isNotEmpty) purpose,
+                                    if (pin.isNotEmpty) pin,
+                                  ].join(' • '),
+                                  style: const TextStyle(color: Colors.white60, fontSize: 10),
+                                ),
+                              ],
+                              if (params.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 4,
+                                  runSpacing: 4,
+                                  children: params.map<Widget>((p) {
+                                    final pName = p['displayName'] ?? p['parameterName'] ?? p['name'] ?? '';
+                                    final pUnit = p['unit'] ?? '';
+                                    final pMin = p['minValue'];
+                                    final pMax = p['maxValue'];
+                                    String rangeStr = pUnit.toString();
+                                    if (pMin != null && pMax != null) {
+                                      rangeStr = '$pMin-$pMax $pUnit';
+                                    }
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF1E293B),
+                                        borderRadius: BorderRadius.circular(3),
+                                        border: Border.all(color: Colors.white12),
+                                      ),
+                                      child: Text(
+                                        '$pName ($rangeStr)',
+                                        style: const TextStyle(color: Colors.white70, fontSize: 9),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                            ],
                           ),
                         );
                       }).toList(),
@@ -893,7 +968,7 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                         tooltip: 'Delete Device',
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                        onPressed: () => _confirmDeleteDevice(context, device),
+                        onPressed: () => _confirmDeleteDevice(device),
                       ),
                     ],
                   ],

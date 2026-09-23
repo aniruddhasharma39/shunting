@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_drawer.dart';
@@ -18,18 +19,72 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  late Future<Map<String, dynamic>> _dashboardDataFuture;
+  Map<String, dynamic>? _dashboardData;
+  bool _isLoading = true;
+  String? _errorMessage;
+  Timer? _liveRefreshTimer;
 
   @override
   void initState() {
     super.initState();
-    _dashboardDataFuture = ApiService.fetchDashboardSummary();
+    _fetchDashboardData(isInitial: true);
+    _startLiveRefreshTimer();
+  }
+
+  @override
+  void dispose() {
+    _liveRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startLiveRefreshTimer() {
+    _liveRefreshTimer?.cancel();
+    // Silently refresh live dashboard summary every 2.5 seconds without unmounting/flashing the UI
+    _liveRefreshTimer = Timer.periodic(const Duration(milliseconds: 2500), (_) {
+      if (mounted) {
+        _fetchDashboardData(isInitial: false);
+      }
+    });
+  }
+
+  Future<void> _fetchDashboardData({bool isInitial = false}) async {
+    if (isInitial && _dashboardData == null) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
+
+    try {
+      final res = await ApiService.fetchDashboardSummary();
+      if (!mounted) return;
+      if (res['success'] == true) {
+        setState(() {
+          _dashboardData = res['data'];
+          _isLoading = false;
+          _errorMessage = null;
+        });
+      } else {
+        if (_dashboardData == null) {
+          setState(() {
+            _errorMessage = res['message'] ?? 'Failed to load dashboard data';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      if (_dashboardData == null) {
+        setState(() {
+          _errorMessage = 'Network error or Server unreachable';
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _refreshData() async {
-    setState(() {
-      _dashboardDataFuture = ApiService.fetchDashboardSummary();
-    });
+    await _fetchDashboardData(isInitial: false);
   }
 
   @override
@@ -65,17 +120,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.account_circle, color: Colors.white),
-            onSelected: (value) {
+            onSelected: (value) async {
               if (value == 'profile') {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const ProfileScreen()),
                 );
               } else if (value == 'logout') {
-                UserSession().clear();
-                Navigator.pushReplacement(
+                await UserSession().clear();
+                if (!context.mounted) return;
+                Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (route) => false,
                 );
               }
             },
@@ -94,38 +151,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _refreshData,
-        child: FutureBuilder<Map<String, dynamic>>(
-          future: _dashboardDataFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            if (snapshot.hasError || !snapshot.hasData || snapshot.data!['success'] == false) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                    const SizedBox(height: 16),
-                    Text(
-                      snapshot.data?['message'] ?? 'Failed to load dashboard data',
-                      style: const TextStyle(color: Colors.red),
+        child: _isLoading && _dashboardData == null
+            ? const Center(child: CircularProgressIndicator())
+            : _errorMessage != null && _dashboardData == null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                        const SizedBox(height: 16),
+                        Text(
+                          _errorMessage!,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () => _fetchDashboardData(isInitial: true),
+                          child: const Text('Retry'),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _refreshData,
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            final data = snapshot.data!['data'];
-            return _buildBodyForRole(context, session, data);
-          },
-        ),
+                  )
+                : _buildBodyForRole(context, session, _dashboardData ?? {}),
       ),
     );
   }
@@ -235,7 +282,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ldDevice: sessionData['ldDevice'] ?? 'LD-???',
                 deDevice: sessionData['deDevice'] ?? 'DE-???',
                 distance: sessionData['distance'] ?? '--m',
-                isClosing: sessionData['isClosing'] ?? false,
+                isClosing: sessionData['isClosing'] == true,
                 isExpanded: true,
               )).toList(),
             ),
@@ -490,7 +537,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ldDevice: sessionData['ldDevice'] ?? 'LD',
           deDevice: sessionData['deDevice'] ?? 'DE',
           distance: sessionData['distance'] ?? '--m',
-          isClosing: sessionData['isClosing'] ?? false,
+          isClosing: sessionData['isClosing'] == true,
           isExpanded: true,
         )).toList(),
       ),
@@ -634,7 +681,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildHealthSummaryGrid({
-    required BuildContext context,
+    required BuildContext context, 
     required Map<String, dynamic> healthData,
     required String title1, 
     required String title2, 
