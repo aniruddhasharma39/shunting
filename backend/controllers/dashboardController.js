@@ -12,12 +12,12 @@ const getDashboardSummary = async (req, res) => {
     // Run background sweep to ensure stale sessions are transitioned to history
     awsIotBridge.sweepStaleSessions().catch(() => {});
 
-    // 1. Real Online count based on 30-second rule from device_telemetry & device_registry
+    // 1. Real Online count based on 45-second rule from device_telemetry & device_registry
     const countRes = await db.query(`
       SELECT 
         COUNT(*)::int AS total_devices,
-        COUNT(CASE WHEN GREATEST(dr.last_reading_timestamp, dt.latest_telemetry_time) >= (NOW() - INTERVAL '30 SECONDS') THEN 1 END)::int AS active_devices,
-        COUNT(CASE WHEN GREATEST(dr.last_reading_timestamp, dt.latest_telemetry_time) < (NOW() - INTERVAL '30 SECONDS') OR (dr.last_reading_timestamp IS NULL AND dt.latest_telemetry_time IS NULL) THEN 1 END)::int AS offline_devices
+        COUNT(CASE WHEN GREATEST(dr.last_reading_timestamp, dt.latest_telemetry_time) >= (NOW() - INTERVAL '45 SECONDS') THEN 1 END)::int AS active_devices,
+        COUNT(CASE WHEN GREATEST(dr.last_reading_timestamp, dt.latest_telemetry_time) < (NOW() - INTERVAL '45 SECONDS') OR (dr.last_reading_timestamp IS NULL AND dt.latest_telemetry_time IS NULL) THEN 1 END)::int AS offline_devices
       FROM device_registry dr
       LEFT JOIN (
         SELECT device_id, MAX(recorded_at) AS latest_telemetry_time
@@ -145,6 +145,47 @@ const getDashboardSummary = async (req, res) => {
         distance: realDistance,
         isClosing: isClosing
       });
+    }
+
+    // 5. Also check for raw active telemetry streams in last 60 seconds (hardware auto-detect)
+    if (liveSessions.length === 0) {
+      const activeRawTel = await db.query(`
+        SELECT DISTINCT ON (device_id) device_id, topic, payload, distance_cm, recorded_at
+        FROM device_telemetry
+        WHERE recorded_at >= (NOW() - INTERVAL '60 SECONDS')
+        ORDER BY device_id, recorded_at DESC
+      `);
+
+      for (const row of activeRawTel.rows) {
+        const devId = row.device_id;
+        if (seenLdDevices.has(devId)) continue;
+
+        const paired = awsIotBridge.derivePairedDevice(devId, {});
+        const rxId = devId.startsWith('RX') || devId.startsWith('LD') ? devId : paired;
+        const txId = devId.startsWith('TX') || devId.startsWith('DE') ? devId : paired;
+
+        seenLdDevices.add(rxId);
+
+        const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : (row.payload || {});
+        const distVal = row.distance_cm ?? payload.readings?.distance_cm ?? payload.distance_cm ?? (payload.distance ? Math.round(Number(payload.distance) * 100) : null);
+        let realDistance = '--m';
+        let isClosing = false;
+        if (distVal != null) {
+          const meters = (distVal / 100).toFixed(1);
+          realDistance = `${meters}m`;
+          isClosing = (distVal / 100) < 5.0;
+        }
+
+        liveSessions.push({
+          id: `live_${rxId}_${txId}`,
+          yard: 'North Yard',
+          line: 'Main Shunt Line',
+          ldDevice: rxId,
+          deDevice: txId,
+          distance: realDistance,
+          isClosing: isClosing
+        });
+      }
     }
 
     // Also check device_assignments (if actively streaming telemetry in the last 60s)

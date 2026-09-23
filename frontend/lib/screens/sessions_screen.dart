@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../widgets/app_drawer.dart';
 import '../services/api_service.dart';
+import 'live_telemetry_screen.dart';
+
 
 class SessionsScreen extends StatefulWidget {
   const SessionsScreen({super.key});
@@ -497,6 +500,47 @@ class _SessionsScreenState extends State<SessionsScreen> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 16),
+                      // Action buttons in Cockpit
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _showSessionSummaryDialog(session),
+                              icon: const Icon(Icons.table_chart, size: 16, color: Colors.cyanAccent),
+                              label: const Text('Tabular Logs', style: TextStyle(color: Colors.cyanAccent, fontSize: 12)),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.cyanAccent),
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => LiveTelemetryScreen(
+                                      deviceId: session['ldDevice'] ?? 'TX-01',
+                                      initialTopic: 'devices/${session['ldDevice'] ?? 'TX-01'}/telemetry',
+                                    ),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.terminal, size: 16, color: Colors.white),
+                              label: const Text('Live Stream', style: TextStyle(color: Colors.white, fontSize: 12)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF0284C7),
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -643,127 +687,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
   void _showSessionSummaryDialog(dynamic session) {
     showDialog(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: Colors.cyanAccent, width: 1.5),
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.cyanAccent.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.summarize, color: Colors.cyanAccent, size: 22),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Session Summary', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
-                  Text(session['session_code'] ?? 'SES-COMPLETED', style: const TextStyle(color: Colors.cyanAccent, fontSize: 12)),
-                ],
-              ),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Pairing Hud
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    Column(
-                      children: [
-                        const Text('RECEIVER (LOCO)', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(Icons.train, color: Colors.lightBlueAccent, size: 16),
-                            const SizedBox(width: 4),
-                            Text(session['ldDevice'] ?? 'RX', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const Icon(Icons.sync_alt, color: Colors.cyanAccent, size: 18),
-                    Column(
-                      children: [
-                        const Text('TRANSMITTER (DE)', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(Icons.sensors, color: Colors.amberAccent, size: 16),
-                            const SizedBox(width: 4),
-                            Text(session['deDevice'] ?? 'TX', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // 2. Metrics summary
-              _buildSummaryRow('Final Placement Distance', session['finalPlacement'] ?? session['distance'] ?? '--', isHighlight: true),
-              _buildSummaryRow('Min Proximity Reached', session['minDistance'] ?? session['distance'] ?? '--'),
-              _buildSummaryRow('Operation Duration', session['duration'] ?? '--'),
-              _buildSummaryRow('Connection Time', _formatTime(session['startTime'])),
-              _buildSummaryRow('Disconnection Time', _formatTime(session['endTime'])),
-              _buildSummaryRow('Assigned Yard', session['yard'] ?? 'North Yard'),
-              _buildSummaryRow('Track / Pit Line', session['line'] ?? 'Main Shunt Line'),
-              _buildSummaryRow('Loco Pilot / Holder', session['holder'] ?? 'ian'),
-              _buildSummaryRow('Status at End', session['status'] ?? 'Completed'),
-              if (session['remarks'] != null && session['remarks'].toString().isNotEmpty)
-                _buildSummaryRow('Close Reason', session['remarks'].toString()),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('CLOSE', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryRow(String label, String value, {bool isHighlight = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
-          Flexible(
-            child: Text(
-              value,
-              style: TextStyle(
-                color: isHighlight ? Colors.greenAccent : Colors.white,
-                fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
-                fontSize: isHighlight ? 14 : 12,
-              ),
-              textAlign: TextAlign.end,
-            ),
-          ),
-        ],
-      ),
+      builder: (dialogCtx) => SessionAuditDialog(session: session),
     );
   }
 
@@ -905,3 +829,475 @@ class _SessionsScreenState extends State<SessionsScreen> {
     return num.tryParse(val.toString()) ?? 0;
   }
 }
+
+// =========================================================================
+// SESSION AUDIT & TABULAR LOGS DIALOG
+// =========================================================================
+class SessionAuditDialog extends StatefulWidget {
+  final dynamic session;
+
+  const SessionAuditDialog({super.key, required this.session});
+
+  @override
+  State<SessionAuditDialog> createState() => _SessionAuditDialogState();
+}
+
+class _SessionAuditDialogState extends State<SessionAuditDialog> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  bool _isLoadingLogs = true;
+  List<dynamic> _tabularLogs = [];
+  Map<String, dynamic> _sessionDetail = {};
+  String _searchFilter = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _sessionDetail = Map<String, dynamic>.from(widget.session);
+    _loadSessionDetailsAndLogs();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSessionDetailsAndLogs() async {
+    final sessionId = widget.session['id']?.toString() ?? widget.session['session_code']?.toString();
+    if (sessionId == null) {
+      setState(() => _isLoadingLogs = false);
+      return;
+    }
+
+    final res = await ApiService.fetchSessionDetailsWithLogs(sessionId);
+    if (mounted) {
+      if (res['success'] == true) {
+        setState(() {
+          _sessionDetail = res['session'] ?? _sessionDetail;
+          _tabularLogs = res['tabularLogs'] ?? [];
+          _isLoadingLogs = false;
+        });
+      } else {
+        setState(() => _isLoadingLogs = false);
+      }
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    final sessionId = widget.session['id']?.toString() ?? widget.session['session_code']?.toString();
+    if (sessionId == null) return;
+    final url = ApiService.getSessionPdfUrl(sessionId);
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Downloading Session PDF Report...'), backgroundColor: Colors.cyan),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportExcel() async {
+    final sessionId = widget.session['id']?.toString() ?? widget.session['session_code']?.toString();
+    if (sessionId == null) return;
+    final url = ApiService.getSessionExcelUrl(sessionId);
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Downloading Session Excel Report...'), backgroundColor: Colors.cyan),
+        );
+      }
+    }
+  }
+
+  String _formatTime(dynamic val) {
+    if (val == null) return '--:--';
+    try {
+      final d = DateTime.parse(val.toString()).toLocal();
+      final h = d.hour > 12 ? d.hour - 12 : (d.hour == 0 ? 12 : d.hour);
+      final ampm = d.hour >= 12 ? 'PM' : 'AM';
+      return "${h.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')} $ampm";
+    } catch (_) {
+      return val.toString();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sessionCode = _sessionDetail['session_code'] ?? widget.session['session_code'] ?? 'SES-DETAIL';
+    final status = _sessionDetail['status'] ?? widget.session['status'] ?? 'Completed';
+    final isLive = status.toString().toUpperCase().contains('LIVE');
+
+    return Dialog(
+      backgroundColor: const Color(0xFF0F172A),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Colors.cyanAccent, width: 1.5),
+      ),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: Container(
+        width: double.maxFinite,
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+        child: Column(
+          children: [
+            // Top Header
+            Container(
+              padding: const EdgeInsets.fromLTRB(18, 16, 12, 12),
+              decoration: const BoxDecoration(
+                color: Color(0xFF1E293B),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.cyanAccent.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.analytics_outlined, color: Colors.cyanAccent, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                sessionCode,
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isLive ? Colors.redAccent.withValues(alpha: 0.2) : Colors.greenAccent.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: isLive ? Colors.redAccent : Colors.greenAccent, width: 0.8),
+                              ),
+                              child: Text(
+                                isLive ? 'LIVE' : 'COMPLETED',
+                                style: TextStyle(
+                                  color: isLive ? Colors.redAccent : Colors.greenAccent,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_sessionDetail['ldDevice'] ?? 'RX'} <--> ${_sessionDetail['deDevice'] ?? 'TX'} • ${_sessionDetail['yard'] ?? 'Yard'}',
+                          style: const TextStyle(color: Colors.white60, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent, size: 22),
+                    tooltip: 'Export PDF Report',
+                    onPressed: _exportPdf,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.table_view, color: Colors.greenAccent, size: 22),
+                    tooltip: 'Export Excel Report',
+                    onPressed: _exportExcel,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white60, size: 20),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+
+            // Tab Bar
+            Container(
+              color: const Color(0xFF1E293B),
+              child: TabBar(
+                controller: _tabController,
+                indicatorColor: Colors.cyanAccent,
+                labelColor: Colors.cyanAccent,
+                unselectedLabelColor: Colors.white60,
+                tabs: [
+                  const Tab(icon: Icon(Icons.info_outline, size: 16), text: 'METADATA & SUMMARY'),
+                  Tab(
+                    icon: const Icon(Icons.list_alt, size: 16),
+                    text: 'TABULAR LOGS (${_tabularLogs.length})',
+                  ),
+                ],
+              ),
+            ),
+
+            // Tab Content
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildOverviewTab(),
+                  _buildTabularLogsTab(),
+                ],
+              ),
+            ),
+
+            // Bottom Actions Bar
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: const BoxDecoration(
+                color: Color(0xFF1E293B),
+                borderRadius: BorderRadius.vertical(bottom: Radius.circular(18)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _exportPdf,
+                      icon: const Icon(Icons.picture_as_pdf, size: 16, color: Colors.redAccent),
+                      label: const Text('PDF Report', style: TextStyle(color: Colors.white, fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.redAccent),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _exportExcel,
+                      icon: const Icon(Icons.table_view, size: 16, color: Colors.greenAccent),
+                      label: const Text('Excel Data', style: TextStyle(color: Colors.white, fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.greenAccent),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.cyanAccent.shade700,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text('Close', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverviewTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Pairing HUD
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Column(
+                  children: [
+                    const Text('RECEIVER (LOCO)', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.train, color: Colors.lightBlueAccent, size: 16),
+                        const SizedBox(width: 4),
+                        Text(_sessionDetail['ldDevice'] ?? 'RX', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                      ],
+                    ),
+                  ],
+                ),
+                const Icon(Icons.sync_alt, color: Colors.cyanAccent, size: 20),
+                Column(
+                  children: [
+                    const Text('TRANSMITTER (DE)', style: TextStyle(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.sensors, color: Colors.amberAccent, size: 16),
+                        const SizedBox(width: 4),
+                        Text(_sessionDetail['deDevice'] ?? 'TX', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          _buildSummaryRow('Final Placement Distance', _sessionDetail['finalPlacement'] ?? _sessionDetail['distance'] ?? '--', isHighlight: true),
+          _buildSummaryRow('Minimum Proximity Reached', _sessionDetail['minDistance'] ?? '--'),
+          _buildSummaryRow('Operation Duration', _sessionDetail['duration'] ?? '--'),
+          _buildSummaryRow('Session Start (IST)', _formatTime(_sessionDetail['startTime'])),
+          _buildSummaryRow('Session End (IST)', _sessionDetail['endTime'] != null ? _formatTime(_sessionDetail['endTime']) : 'LIVE'),
+          _buildSummaryRow('Assigned Yard', _sessionDetail['yard'] ?? 'North Yard'),
+          _buildSummaryRow('Track / Pit Line', _sessionDetail['line'] ?? 'Main Shunt Line'),
+          _buildSummaryRow('Loco Pilot / Holder', '${_sessionDetail['holder'] ?? _sessionDetail['holderName'] ?? 'ian'} (${_sessionDetail['holderEmployeeId'] ?? 'EMP-001'})'),
+          _buildSummaryRow('Total Logged Data Points', '${_tabularLogs.length} Telemetry Records'),
+          if (_sessionDetail['remarks'] != null && _sessionDetail['remarks'].toString().isNotEmpty)
+            _buildSummaryRow('Close Reason', _sessionDetail['remarks'].toString()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabularLogsTab() {
+    if (_isLoadingLogs) {
+      return const Center(child: CircularProgressIndicator(color: Colors.cyanAccent));
+    }
+
+    if (_tabularLogs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(Icons.table_rows_outlined, color: Colors.white24, size: 48),
+            SizedBox(height: 12),
+            Text('No telemetry log points recorded for this session.', style: TextStyle(color: Colors.white38)),
+          ],
+        ),
+      );
+    }
+
+    final filteredLogs = _tabularLogs.where((log) {
+      if (_searchFilter.isEmpty) return true;
+      final s = _searchFilter.toLowerCase();
+      return (log['time']?.toString().toLowerCase().contains(s) ?? false) ||
+             (log['distance_display']?.toString().toLowerCase().contains(s) ?? false) ||
+             (log['safety_status']?.toString().toLowerCase().contains(s) ?? false);
+    }).toList();
+
+    return Column(
+      children: [
+        // Quick filter box
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+          child: SizedBox(
+            height: 36,
+            child: TextField(
+              onChanged: (v) => setState(() => _searchFilter = v),
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+              decoration: InputDecoration(
+                hintText: 'Search logs (time, distance, status)...',
+                hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+                prefixIcon: const Icon(Icons.search, color: Colors.cyanAccent, size: 16),
+                filled: true,
+                fillColor: const Color(0xFF1E293B),
+                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        // Scrollable Table
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.vertical,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowHeight: 38,
+                dataRowMinHeight: 34,
+                dataRowMaxHeight: 38,
+                headingRowColor: WidgetStateProperty.all(const Color(0xFF1E293B)),
+                columns: const [
+                  DataColumn(label: Text('#', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 11))),
+                  DataColumn(label: Text('Time (IST)', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 11))),
+                  DataColumn(label: Text('Distance', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 11))),
+                  DataColumn(label: Text('Speed', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 11))),
+                  DataColumn(label: Text('Battery', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 11))),
+                  DataColumn(label: Text('Signal', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 11))),
+                  DataColumn(label: Text('Safety Status', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 11))),
+                ],
+                rows: filteredLogs.map<DataRow>((log) {
+                  final dist = log['distance_display'] ?? (log['distance_m'] != null ? '${log['distance_m']}m' : '--m');
+                  final status = log['safety_status'] ?? 'NORMAL';
+                  Color statusColor = Colors.greenAccent;
+                  if (status == 'CRITICAL HAZARD') {
+                    statusColor = Colors.redAccent;
+                  } else if (status == 'APPROACHING') {
+                    statusColor = Colors.amberAccent;
+                  }
+
+
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(log['index']?.toString() ?? '-', style: const TextStyle(color: Colors.white54, fontSize: 11))),
+                      DataCell(Text(log['time']?.toString() ?? '--', style: const TextStyle(color: Colors.white, fontSize: 11, fontFamily: 'monospace'))),
+                      DataCell(Text(dist, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12))),
+                      DataCell(Text(log['speed_display'] ?? '0.0 km/h', style: const TextStyle(color: Colors.white70, fontSize: 11))),
+                      DataCell(Text(log['rx_battery'] ?? '95%', style: const TextStyle(color: Colors.greenAccent, fontSize: 11))),
+                      DataCell(Text(log['signal_rssi'] ?? '-65 dBm', style: const TextStyle(color: Colors.cyanAccent, fontSize: 11))),
+                      DataCell(
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: statusColor.withValues(alpha: 0.4), width: 0.8),
+                          ),
+                          child: Text(status, style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value, {bool isHighlight = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          Flexible(
+            child: Text(
+              value,
+              style: TextStyle(
+                color: isHighlight ? Colors.greenAccent : Colors.white,
+                fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
+                fontSize: isHighlight ? 14 : 12,
+              ),
+              textAlign: TextAlign.end,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

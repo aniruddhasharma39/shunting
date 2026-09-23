@@ -376,6 +376,35 @@ class ApiService {
     }
   }
 
+  /// Fetch single session details with tabular telemetry logs
+  static Future<Map<String, dynamic>> fetchSessionDetailsWithLogs(String sessionId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/sessions/$sessionId/logs'),
+        headers: _authHeaders(),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {
+          'success': true,
+          'session': data['session'] ?? {},
+          'logsCount': data['logsCount'] ?? 0,
+          'tabularLogs': data['tabularLogs'] ?? []
+        };
+      }
+      return {'success': false, 'message': data['message'] ?? 'Failed to load session logs'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error fetching session logs.'};
+    }
+  }
+
+  static String getSessionPdfUrl(String sessionId) {
+    return '$baseUrl/reports/session/$sessionId/pdf';
+  }
+
+  static String getSessionExcelUrl(String sessionId) {
+    return '$baseUrl/reports/session/$sessionId/excel';
+  }
 
   static Future<Map<String, dynamic>> fetchTelemetryAudit(String deviceId) async {
     try {
