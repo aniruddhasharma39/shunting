@@ -142,8 +142,13 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                           children: [
                             const Icon(Icons.train, size: 18, color: AppTheme.primaryColor),
                             const SizedBox(width: 8),
-                            Text('$code ($type)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                            const Spacer(),
+                            Expanded(
+                              child: Text('$code ($type)', 
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), 
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
@@ -183,9 +188,22 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                           children: [
                             const Icon(Icons.person, size: 18, color: Colors.blueGrey),
                             const SizedBox(width: 8),
-                            Text('$name ($empId)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                            const Spacer(),
-                            Text(desig, style: const TextStyle(fontSize: 12, color: AppTheme.subtitleColor)),
+                            Expanded(
+                              flex: 3,
+                              child: Text('$name ($empId)', 
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: Text(desig, 
+                                style: const TextStyle(fontSize: 12, color: AppTheme.subtitleColor),
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.right,
+                              ),
+                            ),
                           ],
                         ),
                       );
