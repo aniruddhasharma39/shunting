@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/app_drawer.dart';
@@ -63,12 +64,17 @@ class _SessionsScreenState extends State<SessionsScreen> {
         if (_liveSessions.isNotEmpty && newLive.isEmpty) {
           _fetchHistorySessions();
         }
-        setState(() {
-          _liveSessions = newLive;
-          _isLoadingLive = false;
-        });
+        final isSame = jsonEncode(_liveSessions) == jsonEncode(newLive);
+        if (!isSame || _isLoadingLive) {
+          setState(() {
+            _liveSessions = newLive;
+            _isLoadingLive = false;
+          });
+        }
       } else {
-        setState(() => _isLoadingLive = false);
+        if (_isLoadingLive) {
+          setState(() => _isLoadingLive = false);
+        }
       }
     }
   }
@@ -78,12 +84,18 @@ class _SessionsScreenState extends State<SessionsScreen> {
     final result = await ApiService.fetchSessions(status: 'history');
     if (mounted) {
       if (result['success']) {
-        setState(() {
-          _historySessions = result['data'] ?? [];
-          _isLoadingHistory = false;
-        });
+        final newHistory = result['data'] ?? [];
+        final isSame = jsonEncode(_historySessions) == jsonEncode(newHistory);
+        if (!isSame || _isLoadingHistory) {
+          setState(() {
+            _historySessions = newHistory;
+            _isLoadingHistory = false;
+          });
+        }
       } else {
-        setState(() => _isLoadingHistory = false);
+        if (_isLoadingHistory) {
+          setState(() => _isLoadingHistory = false);
+        }
       }
     }
   }

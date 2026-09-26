@@ -78,16 +78,17 @@ const getRegistryDevices = async (req, res) => {
     }
 
     if (product_type && product_type !== 'ALL') {
-      params.push(product_type);
-      const pIdx = params.length;
+      const pTypeUpper = product_type.toUpperCase();
       // Allow matching either exact product_type or mapped type (e.g. Loco Unit / RECEIVER)
-      if (product_type.toUpperCase() === 'RECEIVER' || product_type === 'Loco Unit') {
+      if (pTypeUpper === 'RECEIVER' || product_type === 'Loco Unit') {
         query += ` AND (dr.product_type ILIKE '%RECEIVER%' OR dr.product_type ILIKE '%Loco%' OR dr.device_id ILIKE 'RX%' OR dr.device_id ILIKE 'LD%')`;
-      } else if (product_type.toUpperCase() === 'TRANSMITTER' || product_type === 'Dead-End') {
+      } else if (pTypeUpper === 'TRANSMITTER' || product_type === 'Dead-End') {
         query += ` AND (dr.product_type ILIKE '%TRANSMITTER%' OR dr.product_type ILIKE '%Dead%' OR dr.device_id ILIKE 'TX%' OR dr.device_id ILIKE 'DE%')`;
-      } else if (product_type.toUpperCase() === 'REPEATER' || product_type === 'Portable') {
+      } else if (pTypeUpper === 'REPEATER' || product_type === 'Portable') {
         query += ` AND (dr.product_type ILIKE '%REPEATER%' OR dr.product_type ILIKE '%Portable%' OR dr.device_id ILIKE 'RP%' OR dr.device_id ILIKE 'PD%')`;
       } else {
+        params.push(product_type);
+        const pIdx = params.length;
         query += ` AND (dr.product_type = $${pIdx} OR dr.device_type = $${pIdx})`;
       }
     }

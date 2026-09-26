@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_drawer.dart';
@@ -59,11 +60,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final res = await ApiService.fetchDashboardSummary();
       if (!mounted) return;
       if (res['success'] == true) {
-        setState(() {
-          _dashboardData = res['data'];
-          _isLoading = false;
-          _errorMessage = null;
-        });
+        final newData = res['data'];
+        final isSame = jsonEncode(_dashboardData) == jsonEncode(newData);
+        if (!isSame || _isLoading) {
+          setState(() {
+            _dashboardData = newData;
+            _isLoading = false;
+            _errorMessage = null;
+          });
+        }
       } else {
         if (_dashboardData == null) {
           setState(() {
@@ -770,7 +775,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Padding(
             padding: const EdgeInsets.all(12.0),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
@@ -797,17 +802,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 Expanded(
-                  child: Align(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
                     alignment: Alignment.bottomLeft,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        value,
-                        style: TextStyle(
-                          color: AppTheme.primaryColor,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        color: AppTheme.primaryColor,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),

@@ -250,9 +250,12 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
               child: const Icon(Icons.inventory_2, color: Color(0xFF38BDF8), size: 20),
             ),
             const SizedBox(width: 10),
-            const Text(
-              'Device Inventory',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+            const Expanded(
+              child: Text(
+                'Device Inventory',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -293,38 +296,27 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildMetricsSummary(),
-              const SizedBox(height: 16),
-              _buildSearchBar(),
-              const SizedBox(height: 12),
-              _buildFilterChips(),
-              const SizedBox(height: 16),
-              _buildDeviceListHeader(),
-              const SizedBox(height: 8),
-              _isLoading
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 40),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  : _buildDeviceCardsList(session),
-            ],
-          ),
-        ),
-      ),
-      floatingActionButton: (session.canManageDevices)
-          ? FloatingActionButton.extended(
-              onPressed: () => _showAddDeviceModal(context),
-              backgroundColor: const Color(0xFF0284C7),
-              icon: const Icon(Icons.add_circle_outline, color: Colors.white),
-              label: const Text(
-                'Register IoT Device',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildMetricsSummary(),
+                    const SizedBox(height: 16),
+                    _buildSearchBar(),
+                    const SizedBox(height: 12),
+                    _buildFilterChips(session),
+                    const SizedBox(height: 16),
+                    _buildDeviceListHeader(),
+                    const SizedBox(height: 8),
+                    _isLoading
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 40),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        : _buildDeviceCardsList(session),
+                  ],
+                ),
               ),
-            )
-          : null,
+            ),
     );
   }
 
@@ -431,120 +423,224 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
   Widget _buildSearchBar() {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF334155)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: Colors.black.withOpacity(0.05)),
       ),
       child: TextField(
         controller: _searchController,
-        style: const TextStyle(color: Colors.white, fontSize: 14),
+        style: const TextStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.w500),
+        onChanged: (value) {
+          // Trigger a rebuild so the clear icon appears dynamically as you type
+          setState(() {});
+        },
         decoration: InputDecoration(
-          hintText: 'Search by Device ID, Serial No, Product Type...',
-          hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
-          prefixIcon: const Icon(Icons.search, color: Color(0xFF38BDF8), size: 20),
+          hintText: 'Search Device ID, Type, Serial No...',
+          hintStyle: const TextStyle(color: Colors.black38, fontSize: 13),
+          prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF0284C7), size: 22),
           suffixIcon: _searchController.text.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.clear, color: Colors.white54, size: 18),
+                  icon: const Icon(Icons.cancel, color: Colors.black26, size: 20),
+                  splashRadius: 20,
                   onPressed: () {
                     _searchController.clear();
+                    setState(() {});
                     _fetchInventory();
                   },
                 )
               : null,
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
         onSubmitted: (_) => _fetchInventory(),
       ),
     );
   }
 
-  Widget _buildFilterChips() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildFilterChips(UserSession session) {
+    return Row(
       children: [
-        // Product Type Filter
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: _typeFilters.map((type) {
-              final isSelected = _selectedType == type;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: FilterChip(
-                  label: Text(type),
-                  selected: isSelected,
-                  onSelected: (selected) {
-                    setState(() => _selectedType = type);
+        // Product Type Filter Dropdown
+        Expanded(
+          flex: 4,
+          child: Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF334155)),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedType,
+                isExpanded: true,
+                dropdownColor: const Color(0xFF1E293B),
+                icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF38BDF8), size: 20),
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                selectedItemBuilder: (BuildContext context) {
+                  return _typeFilters.map<Widget>((String type) {
+                    return Row(
+                      children: [
+                        Icon(
+                          type == 'ALL' ? Icons.category : Icons.devices,
+                          size: 14,
+                          color: const Color(0xFF38BDF8),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            type == 'ALL' ? 'Types' : type,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList();
+                },
+                items: _typeFilters.map((String type) {
+                  return DropdownMenuItem<String>(
+                    value: type,
+                    child: Row(
+                      children: [
+                        Icon(
+                          type == 'ALL' ? Icons.category : Icons.devices,
+                          size: 16,
+                          color: const Color(0xFF38BDF8),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(type == 'ALL' ? 'All Types' : type),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  if (newValue != null) {
+                    setState(() => _selectedType = newValue);
                     _fetchInventory();
-                  },
-                  backgroundColor: const Color(0xFF1E293B),
-                  selectedColor: const Color(0xFF0284C7),
-                  labelStyle: TextStyle(
-                    color: isSelected ? Colors.white : Colors.white70,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    fontSize: 12,
-                  ),
-                  side: BorderSide(
-                    color: isSelected ? const Color(0xFF38BDF8) : const Color(0xFF334155),
-                  ),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                ),
-              );
-            }).toList(),
+                  }
+                },
+              ),
+            ),
           ),
         ),
-        const SizedBox(height: 6),
-        // Health Status Filter
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: _healthStatuses.map((status) {
-              final isSelected = _selectedStatus == status;
-              Color statusColor = const Color(0xFF0284C7);
-              if (status == 'ONLINE') statusColor = const Color(0xFF10B981);
-              if (status == 'OFFLINE') statusColor = const Color(0xFFEF4444);
-
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(
-                  label: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (status == 'ONLINE') ...[
-                        const Icon(Icons.circle, color: Color(0xFF10B981), size: 10),
-                        const SizedBox(width: 4),
+        const SizedBox(width: 8),
+        // Health Status Filter Dropdown
+        Expanded(
+          flex: 4,
+          child: Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF334155)),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedStatus,
+                isExpanded: true,
+                dropdownColor: const Color(0xFF1E293B),
+                icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF38BDF8), size: 20),
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                selectedItemBuilder: (BuildContext context) {
+                  return _healthStatuses.map<Widget>((String status) {
+                    Color statusColor = const Color(0xFF38BDF8);
+                    if (status == 'ONLINE') statusColor = const Color(0xFF10B981);
+                    if (status == 'OFFLINE') statusColor = const Color(0xFFEF4444);
+                    
+                    return Row(
+                      children: [
+                        Icon(
+                          status == 'ALL' ? Icons.wifi_find : Icons.circle,
+                          size: status == 'ALL' ? 14 : 8,
+                          color: statusColor,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            status == 'ALL' ? 'Status' : status,
+                            style: TextStyle(color: status == 'ALL' ? Colors.white : statusColor),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
-                      if (status == 'OFFLINE') ...[
-                        const Icon(Icons.circle, color: Color(0xFFEF4444), size: 10),
-                        const SizedBox(width: 4),
+                    );
+                  }).toList();
+                },
+                items: _healthStatuses.map((String status) {
+                  Color statusColor = const Color(0xFF38BDF8);
+                  if (status == 'ONLINE') statusColor = const Color(0xFF10B981);
+                  if (status == 'OFFLINE') statusColor = const Color(0xFFEF4444);
+                  
+                  return DropdownMenuItem<String>(
+                    value: status,
+                    child: Row(
+                      children: [
+                        Icon(
+                          status == 'ALL' ? Icons.wifi_find : Icons.circle,
+                          size: status == 'ALL' ? 16 : 10,
+                          color: statusColor,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          status == 'ALL' ? 'All Statuses' : status,
+                          style: TextStyle(color: status == 'ALL' ? Colors.white : statusColor),
+                        ),
                       ],
-                      Text(status == 'ALL' ? 'All Statuses' : status),
-                    ],
-                  ),
-                  selected: isSelected,
-                  onSelected: (selected) {
-                    if (selected) {
-                      setState(() => _selectedStatus = status);
-                      _fetchInventory();
-                    }
-                  },
-                  backgroundColor: const Color(0xFF1E293B),
-                  selectedColor: statusColor.withValues(alpha: 0.3),
-                  labelStyle: TextStyle(
-                    color: isSelected ? Colors.white : Colors.white70,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    fontSize: 11,
-                  ),
-                  side: BorderSide(
-                    color: isSelected ? statusColor : const Color(0xFF334155),
-                  ),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                ),
-              );
-            }).toList(),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  if (newValue != null) {
+                    setState(() => _selectedStatus = newValue);
+                    _fetchInventory();
+                  }
+                },
+              ),
+            ),
           ),
         ),
+        if (session.canManageDevices) ...[
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 3,
+            child: SizedBox(
+              height: 48,
+              child: ElevatedButton(
+                onPressed: () => _showAddDeviceModal(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0284C7),
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add, size: 16),
+                    SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        'Register', 
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
