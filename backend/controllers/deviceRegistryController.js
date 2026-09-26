@@ -586,7 +586,17 @@ const deleteRegistryDevice = async (req, res) => {
     const matchedUuid = findRes.rows[0]?.id;
 
     // 1. Delete from device_telemetry (primary AWS IoT telemetry table)
-    await db.query('DELETE FROM device_telemetry WHERE device_id = $1', [matchedDevId]);
+    try {
+      if (matchedUuid) {
+        await db.query('DELETE FROM device_telemetry WHERE device_id = $1 OR device_id::text = $2', [matchedUuid, matchedDevId]);
+      } else {
+        await db.query('DELETE FROM device_telemetry WHERE device_id::text = $1', [matchedDevId]);
+      }
+    } catch (e) {
+      try {
+        await db.query('DELETE FROM device_telemetry WHERE device_id = $1', [matchedDevId]);
+      } catch (_) {}
+    }
 
     // 2. Delete from legacy telemetry_data
     try {
