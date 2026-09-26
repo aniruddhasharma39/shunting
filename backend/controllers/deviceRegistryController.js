@@ -639,7 +639,7 @@ const deleteRegistryDevice = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in deleteRegistryDevice:', error);
-    res.status(500).json({ success: false, message: 'Server error deleting device' });
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
   }
 };
 
