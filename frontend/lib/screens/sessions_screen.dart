@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 import '../widgets/app_drawer.dart';
 import '../services/api_service.dart';
 import 'live_telemetry_screen.dart';
@@ -917,6 +918,15 @@ class _SessionAuditDialogState extends State<SessionAuditDialog> with SingleTick
     }
   }
 
+  Future<void> _sharePdf() async {
+    final sessionId = widget.session['id']?.toString() ?? widget.session['session_code']?.toString();
+    if (sessionId == null) return;
+    final url = ApiService.getSessionPdfUrl(sessionId);
+    try {
+      await Share.share('SafeShunt Session Report: $url', subject: 'Session Report $sessionId');
+    } catch (_) {}
+  }
+
   String _formatTime(dynamic val) {
     if (val == null) return '--:--';
     try {
@@ -1006,6 +1016,11 @@ class _SessionAuditDialogState extends State<SessionAuditDialog> with SingleTick
                     ),
                   ),
                   IconButton(
+                    icon: const Icon(Icons.share, color: Colors.blueAccent, size: 22),
+                    tooltip: 'Share Report',
+                    onPressed: _sharePdf,
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent, size: 22),
                     tooltip: 'Export PDF Report',
                     onPressed: _exportPdf,
@@ -1064,34 +1079,46 @@ class _SessionAuditDialogState extends State<SessionAuditDialog> with SingleTick
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: _exportPdf,
-                      icon: const Icon(Icons.picture_as_pdf, size: 16, color: Colors.redAccent),
-                      label: const Text('PDF Report', style: TextStyle(color: Colors.white, fontSize: 12)),
+                      icon: const Icon(Icons.picture_as_pdf, size: 14, color: Colors.redAccent),
+                      label: const Text('PDF', style: TextStyle(color: Colors.white, fontSize: 11)),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: Colors.redAccent),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: _exportExcel,
-                      icon: const Icon(Icons.table_view, size: 16, color: Colors.greenAccent),
-                      label: const Text('Excel Data', style: TextStyle(color: Colors.white, fontSize: 12)),
+                      icon: const Icon(Icons.table_view, size: 14, color: Colors.greenAccent),
+                      label: const Text('Excel', style: TextStyle(color: Colors.white, fontSize: 11)),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: Colors.greenAccent),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _sharePdf,
+                      icon: const Icon(Icons.share, size: 14, color: Colors.blueAccent),
+                      label: const Text('Share', style: TextStyle(color: Colors.white, fontSize: 11)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.blueAccent),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
                   ElevatedButton(
                     onPressed: () => Navigator.pop(context),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.cyanAccent.shade700,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
-                    child: const Text('Close', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                    child: const Text('Close', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
                   ),
                 ],
               ),
