@@ -1,26 +1,28 @@
 const db = require('../config/db');
 const awsIotBridge = require('../services/awsIotBridge');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const cloudinary = require('cloudinary').v2;
 
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || 'ap-south-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  }
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-async function uploadToS3(fileBuffer, mimeType, filename) {
-  if (!process.env.AWS_S3_BUCKET) return null;
-  const command = new PutObjectCommand({
-    Bucket: process.env.AWS_S3_BUCKET,
-    Key: filename,
-    Body: fileBuffer,
-    ContentType: mimeType,
-    // Note: To make it public by default, bucket needs ACL enabled, or you must rely on bucket policies.
+async function uploadToCloudinary(fileBuffer, publicId) {
+  return new Promise((resolve, reject) => {
+    if (!process.env.CLOUDINARY_CLOUD_NAME) return resolve(null);
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { folder: 'shunting_devices', public_id: publicId, resource_type: 'image' },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result.secure_url);
+      }
+    );
+    const stream = require('stream');
+    const bufferStream = new stream.PassThrough();
+    bufferStream.end(fileBuffer);
+    bufferStream.pipe(uploadStream);
   });
-  await s3Client.send(command);
-  return `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION || 'ap-south-1'}.amazonaws.com/${filename}`;
 }
 
 // Helper to derive standard application device_type from product_type or device_id
@@ -501,30 +503,28 @@ const upsertRegistryDevice = async (req, res) => {
       targetYardId = defaultYard.rows[0]?.id;
     }
 
-    // Handle Image Uploads to S3
+    // Handle Image Uploads to Cloudinary
     let deviceImageUrl = null;
     let simImageUrl = null;
     
     if (req.files) {
       if (req.files.device_image && req.files.device_image[0]) {
         const file = req.files.device_image[0];
-        const ext = file.originalname.split('.').pop();
-        const filename = `${device_id}_device_image.${ext}`;
+        const publicId = `${device_id}_device_image`;
         try {
-          deviceImageUrl = await uploadToS3(file.buffer, file.mimetype, filename);
+          deviceImageUrl = await uploadToCloudinary(file.buffer, publicId);
         } catch (e) {
-          console.error('S3 Upload Error (device_image):', e);
+          console.error('Cloudinary Upload Error (device_image):', e);
         }
       }
       
       if (req.files.device_sim && req.files.device_sim[0]) {
         const file = req.files.device_sim[0];
-        const ext = file.originalname.split('.').pop();
-        const filename = `${device_id}_device_sim.${ext}`;
+        const publicId = `${device_id}_device_sim`;
         try {
-          simImageUrl = await uploadToS3(file.buffer, file.mimetype, filename);
+          simImageUrl = await uploadToCloudinary(file.buffer, publicId);
         } catch (e) {
-          console.error('S3 Upload Error (device_sim):', e);
+          console.error('Cloudinary Upload Error (device_sim):', e);
         }
       }
     }
