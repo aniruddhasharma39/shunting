@@ -807,10 +807,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     alignment: Alignment.bottomLeft,
                     child: Text(
                       value,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: AppTheme.primaryColor,
-                        fontSize: 24,
+                        fontSize: value.length > 5 ? 16 : 28,
                         fontWeight: FontWeight.bold,
+                        height: 1.1,
                       ),
                     ),
                   ),

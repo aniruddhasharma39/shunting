@@ -57,7 +57,7 @@ const getDashboardSummary = async (req, res) => {
         AND timestamp >= (NOW() - INTERVAL '24 HOURS')
     `);
     const criticalCount = criticalCountRes.rows[0]?.count || 0;
-    const systemStatus = criticalCount > 0 ? (criticalCount > 5 ? 'Warning' : 'Degraded') : '100% Operational';
+    const systemStatus = criticalCount > 0 ? (criticalCount > 5 ? 'Warning' : 'Degraded') : 'Operational';
 
     // 4. Live Active Sessions
     // Find all registered transmitters to avoid any 'N/A' pairing
