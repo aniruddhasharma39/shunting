@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'user_session.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://localhost:5000/api';
+  static const String baseUrl = 'https://shunting-lemon.vercel.app/api';
 
   /// Get auth headers with Bearer token
   static Map<String, String> _authHeaders() {
@@ -277,12 +277,12 @@ class ApiService {
 
 
 
-  static Future<Map<String, dynamic>> createYard(String yardName) async {
+  static Future<Map<String, dynamic>> createYard(String yardName, String location) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/yards'),
         headers: _authHeaders(),
-        body: jsonEncode({'yard_name': yardName})
+        body: jsonEncode({'yard_name': yardName, 'location': location})
       );
       final data = jsonDecode(response.body);
       if (response.statusCode == 201) return {'success': true, 'data': data};

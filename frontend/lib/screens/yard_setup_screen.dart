@@ -299,6 +299,7 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
 
   void _showYardForm() {
     final nameController = TextEditingController();
+    final locationController = TextEditingController();
     bool isSubmitting = false;
     showModalBottomSheet(
       context: context,
@@ -341,14 +342,26 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      const Text('Location', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.subtitleColor)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: locationController,
+                        decoration: InputDecoration(
+                          hintText: 'e.g. Mumbai',
+                          filled: true,
+                          fillColor: AppTheme.backgroundColor,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                        ),
+                      ),
                       const SizedBox(height: 32),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: isSubmitting ? null : () async {
-                            if (nameController.text.trim().isEmpty) return;
+                            if (nameController.text.trim().isEmpty || locationController.text.trim().isEmpty) return;
                             setModalState(() => isSubmitting = true);
-                            final result = await ApiService.createYard(nameController.text.trim());
+                            final result = await ApiService.createYard(nameController.text.trim(), locationController.text.trim());
                             if (mounted) {
                                if (result['success']) {
                                   Navigator.pop(context);

@@ -129,9 +129,12 @@ class _SessionsScreenState extends State<SessionsScreen> {
                 child: const Icon(Icons.satellite_alt, color: Colors.lightBlueAccent, size: 20),
               ),
               const SizedBox(width: 10),
-              const Text(
-                'Live Operations & Sessions',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+              Expanded(
+                child: Text(
+                  'Live Operations & Sessions',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
