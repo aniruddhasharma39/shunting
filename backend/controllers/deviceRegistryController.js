@@ -1,5 +1,29 @@
 const db = require('../config/db');
 const awsIotBridge = require('../services/awsIotBridge');
+const cloudinary = require('cloudinary').v2;
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+async function uploadToCloudinary(fileBuffer, publicId) {
+  return new Promise((resolve, reject) => {
+    if (!process.env.CLOUDINARY_CLOUD_NAME) return resolve(null);
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { folder: 'shunting_devices', public_id: publicId, resource_type: 'image' },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result.secure_url);
+      }
+    );
+    const stream = require('stream');
+    const bufferStream = new stream.PassThrough();
+    bufferStream.end(fileBuffer);
+    bufferStream.pipe(uploadStream);
+  });
+}
 
 // Helper to derive standard application device_type from product_type or device_id
 function normalizeDeviceType(productType, deviceId) {
@@ -479,12 +503,38 @@ const upsertRegistryDevice = async (req, res) => {
       targetYardId = defaultYard.rows[0]?.id;
     }
 
+    // Handle Image Uploads to Cloudinary
+    let deviceImageUrl = null;
+    let simImageUrl = null;
+    
+    if (req.files) {
+      if (req.files.device_image && req.files.device_image[0]) {
+        const file = req.files.device_image[0];
+        const publicId = `${device_id}_device_image`;
+        try {
+          deviceImageUrl = await uploadToCloudinary(file.buffer, publicId);
+        } catch (e) {
+          console.error('Cloudinary Upload Error (device_image):', e);
+        }
+      }
+      
+      if (req.files.device_sim && req.files.device_sim[0]) {
+        const file = req.files.device_sim[0];
+        const publicId = `${device_id}_device_sim`;
+        try {
+          simImageUrl = await uploadToCloudinary(file.buffer, publicId);
+        } catch (e) {
+          console.error('Cloudinary Upload Error (device_sim):', e);
+        }
+      }
+    }
+
     const result = await db.query(`
       INSERT INTO device_registry (
         device_id, device_name, serial_number, product_type, device_type,
         hardware_version, firmware_version, manufacturing_date,
-        sensors_config, health_status, last_error_code, assigned_line_id, yard_id, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
+        sensors_config, health_status, last_error_code, assigned_line_id, yard_id, device_image_url, sim_image_url, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP)
       ON CONFLICT (device_id) DO UPDATE SET
         device_name = COALESCE(EXCLUDED.device_name, device_registry.device_name),
         serial_number = COALESCE(EXCLUDED.serial_number, device_registry.serial_number),
@@ -498,6 +548,8 @@ const upsertRegistryDevice = async (req, res) => {
         last_error_code = EXCLUDED.last_error_code,
         assigned_line_id = COALESCE(EXCLUDED.assigned_line_id, device_registry.assigned_line_id),
         yard_id = COALESCE(EXCLUDED.yard_id, device_registry.yard_id),
+        device_image_url = COALESCE(EXCLUDED.device_image_url, device_registry.device_image_url),
+        sim_image_url = COALESCE(EXCLUDED.sim_image_url, device_registry.sim_image_url),
         updated_at = CURRENT_TIMESTAMP
       RETURNING *
     `, [
@@ -513,7 +565,9 @@ const upsertRegistryDevice = async (req, res) => {
       health_status || 'ONLINE',
       last_error_code || null,
       assigned_line_id || null,
-      targetYardId || null
+      targetYardId || null,
+      deviceImageUrl,
+      simImageUrl
     ]);
 
     const registered = result.rows[0];
@@ -522,8 +576,8 @@ const upsertRegistryDevice = async (req, res) => {
     if (targetYardId && registered) {
       await db.query(`
         INSERT INTO devices (
-          id, device_code, device_type, device_name, serial_number, yard_id, firmware_version, assigned_line_id, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          id, device_code, device_type, device_name, serial_number, yard_id, firmware_version, assigned_line_id, device_image_url, sim_image_url, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT (id) DO UPDATE SET
           device_code = EXCLUDED.device_code,
           device_type = EXCLUDED.device_type,
@@ -531,6 +585,8 @@ const upsertRegistryDevice = async (req, res) => {
           serial_number = EXCLUDED.serial_number,
           firmware_version = EXCLUDED.firmware_version,
           assigned_line_id = EXCLUDED.assigned_line_id,
+          device_image_url = COALESCE(EXCLUDED.device_image_url, devices.device_image_url),
+          sim_image_url = COALESCE(EXCLUDED.sim_image_url, devices.sim_image_url),
           updated_at = CURRENT_TIMESTAMP
       `, [
         registered.id,
@@ -540,7 +596,9 @@ const upsertRegistryDevice = async (req, res) => {
         registered.serial_number,
         targetYardId,
         registered.firmware_version,
-        registered.assigned_line_id
+        registered.assigned_line_id,
+        deviceImageUrl,
+        simImageUrl
       ]);
     }
 

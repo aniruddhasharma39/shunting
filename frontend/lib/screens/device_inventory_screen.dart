@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_drawer.dart';
@@ -999,6 +1001,68 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                 ],
               ),
             ),
+            
+            // Render Device and SIM images if present
+            if (device['device_image_url'] != null || device['sim_image_url'] != null) ...[
+              const Divider(color: Color(0xFF334155), height: 1),
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'DEVICE IMAGES',
+                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        if (device['device_image_url'] != null)
+                          Expanded(
+                            child: Column(
+                              children: [
+                                const Text('Device', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                                const SizedBox(height: 4),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    device['device_image_url'],
+                                    height: 100,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white24, size: 40),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (device['device_image_url'] != null && device['sim_image_url'] != null)
+                          const SizedBox(width: 12),
+                        if (device['sim_image_url'] != null)
+                          Expanded(
+                            child: Column(
+                              children: [
+                                const Text('SIM Card', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                                const SizedBox(height: 4),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    device['sim_image_url'],
+                                    height: 100,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white24, size: 40),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
 
           // Card Action Buttons
@@ -1142,6 +1206,22 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
     String selectedType = 'Loco Unit';
     String productType = 'RECEIVER';
     bool isSubmitting = false;
+    
+    File? deviceImageFile;
+    File? simImageFile;
+    final ImagePicker picker = ImagePicker();
+
+    Future<void> pickImage(bool isDevice) async {
+      try {
+        final XFile? picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+        if (picked != null) {
+          if (isDevice) deviceImageFile = File(picked.path);
+          else simImageFile = File(picked.path);
+        }
+      } catch (e) {
+        // Handle error
+      }
+    }
 
     showModalBottomSheet(
       context: parentContext,
@@ -1248,6 +1328,49 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                             Expanded(child: _buildInputField('Firmware Version', fwVerCtrl, '2.0.0')),
                           ],
                         ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Upload Images (Optional, for Transparency)',
+                          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await pickImage(true);
+                                  setModalState(() {});
+                                },
+                                icon: Icon(deviceImageFile != null ? Icons.check_circle : Icons.camera_alt, 
+                                  color: deviceImageFile != null ? Colors.green : const Color(0xFF38BDF8), size: 16),
+                                label: Text(deviceImageFile != null ? 'Device Selected' : 'Device Photo',
+                                  style: TextStyle(color: deviceImageFile != null ? Colors.green : const Color(0xFF38BDF8), fontSize: 11)),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  side: BorderSide(color: deviceImageFile != null ? Colors.green : const Color(0xFF38BDF8)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await pickImage(false);
+                                  setModalState(() {});
+                                },
+                                icon: Icon(simImageFile != null ? Icons.check_circle : Icons.sim_card, 
+                                  color: simImageFile != null ? Colors.green : const Color(0xFF38BDF8), size: 16),
+                                label: Text(simImageFile != null ? 'SIM Selected' : 'SIM Photo',
+                                  style: TextStyle(color: simImageFile != null ? Colors.green : const Color(0xFF38BDF8), fontSize: 11)),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  side: BorderSide(color: simImageFile != null ? Colors.green : const Color(0xFF38BDF8)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 24),
                         SizedBox(
                           width: double.infinity,
@@ -1285,7 +1408,11 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                                       'health_status': 'ONLINE',
                                     };
 
-                                    final res = await ApiService.upsertDeviceRegistry(payload);
+                                    final res = await ApiService.upsertDeviceRegistryWithImages(
+                                      payload: payload,
+                                      deviceImagePath: deviceImageFile?.path,
+                                      deviceSimPath: simImageFile?.path,
+                                    );
 
                                     if (context.mounted) {
                                       if (res['success']) {
