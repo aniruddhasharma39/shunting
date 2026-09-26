@@ -628,6 +628,19 @@ const deleteRegistryDevice = async (req, res) => {
       } catch (_) {}
     }
 
+    // 3.5 Delete shunting_sessions and session_events (to handle missing ON DELETE CASCADE)
+    try {
+      if (matchedUuid) {
+        await db.query(`DELETE FROM session_events WHERE session_id IN (SELECT id FROM shunting_sessions WHERE ld_device_id = $1 OR de_device_id = $1)`, [matchedUuid]);
+        await db.query(`DELETE FROM shunting_sessions WHERE ld_device_id = $1 OR de_device_id = $1`, [matchedUuid]);
+      }
+      
+      await db.query(`DELETE FROM session_events WHERE session_id IN (SELECT id FROM shunting_sessions WHERE ld_device_id IN (SELECT id FROM devices WHERE device_code = $1) OR de_device_id IN (SELECT id FROM devices WHERE device_code = $1))`, [matchedDevId]);
+      await db.query(`DELETE FROM shunting_sessions WHERE ld_device_id IN (SELECT id FROM devices WHERE device_code = $1) OR de_device_id IN (SELECT id FROM devices WHERE device_code = $1)`, [matchedDevId]);
+    } catch (e) {
+      console.warn('Warning during shunting_sessions deletion:', e.message);
+    }
+
     // 4. Delete from devices table
     await db.query('DELETE FROM devices WHERE device_code = $1 OR id::text = $1', [matchedDevId]);
 
@@ -640,7 +653,7 @@ const deleteRegistryDevice = async (req, res) => {
     });
   } catch (error) {
     console.error('Error in deleteRegistryDevice:', error);
-    res.status(500).json({ success: false, message: 'Server error deleting device' });
+    res.status(500).json({ success: false, message: 'Server error: ' + error.message });
   }
 };
 
