@@ -1028,7 +1028,14 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  if (device['device_image_url'] != null || device['sim_image_url'] != null)
+                  if (device['device_image_url'] != null || device['sim_image_url'] != null) ...[
+                    if (device['updated_at'] != null) ...[
+                      Text(
+                        'Last Updated: ${_formatToIST(device['updated_at'])}',
+                        style: const TextStyle(color: Colors.white38, fontSize: 10),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     Row(
                       children: [
                         if (device['device_image_url'] != null)
@@ -1039,12 +1046,39 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                                 const SizedBox(height: 4),
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
-                                  child: Image.network(
-                                    device['device_image_url'],
-                                    height: 100,
-                                    width: double.infinity,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white24, size: 40),
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (_) => Dialog(
+                                          backgroundColor: Colors.transparent,
+                                          insetPadding: const EdgeInsets.all(10),
+                                          child: Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              InteractiveViewer(
+                                                child: Image.network(device['device_image_url'], fit: BoxFit.contain),
+                                              ),
+                                              Positioned(
+                                                top: 10,
+                                                right: 10,
+                                                child: IconButton(
+                                                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                                                  onPressed: () => Navigator.pop(context),
+                                                ),
+                                              )
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    child: Image.network(
+                                      device['device_image_url'],
+                                      height: 100,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white24, size: 40),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -1060,20 +1094,47 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                                 const SizedBox(height: 4),
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
-                                  child: Image.network(
-                                    device['sim_image_url'],
-                                    height: 100,
-                                    width: double.infinity,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white24, size: 40),
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (_) => Dialog(
+                                          backgroundColor: Colors.transparent,
+                                          insetPadding: const EdgeInsets.all(10),
+                                          child: Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              InteractiveViewer(
+                                                child: Image.network(device['sim_image_url'], fit: BoxFit.contain),
+                                              ),
+                                              Positioned(
+                                                top: 10,
+                                                right: 10,
+                                                child: IconButton(
+                                                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                                                  onPressed: () => Navigator.pop(context),
+                                                ),
+                                              )
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    child: Image.network(
+                                      device['sim_image_url'],
+                                      height: 100,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white24, size: 40),
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
                       ],
-                    )
-                  else
+                    ),
+                  ] else
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 20),
