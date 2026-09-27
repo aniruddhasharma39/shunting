@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'user_session.dart';
 
 class ApiService {
@@ -488,8 +489,8 @@ class ApiService {
 
   static Future<Map<String, dynamic>> upsertDeviceRegistryWithImages({
     required Map<String, dynamic> payload,
-    String? deviceImagePath,
-    String? deviceSimPath,
+    XFile? deviceImage,
+    XFile? deviceSim,
   }) async {
     try {
       var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/device-registry'));
@@ -510,13 +511,15 @@ class ApiService {
         }
       });
 
-      // Add files
-      if (deviceImagePath != null && deviceImagePath.isNotEmpty) {
-        request.files.add(await http.MultipartFile.fromPath('device_image', deviceImagePath));
+      // Add files safely for web
+      if (deviceImage != null) {
+        final bytes = await deviceImage.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes('device_image', bytes, filename: deviceImage.name));
       }
       
-      if (deviceSimPath != null && deviceSimPath.isNotEmpty) {
-        request.files.add(await http.MultipartFile.fromPath('device_sim', deviceSimPath));
+      if (deviceSim != null) {
+        final bytes = await deviceSim.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes('device_sim', bytes, filename: deviceSim.name));
       }
 
       var streamedResponse = await request.send();
@@ -527,6 +530,43 @@ class ApiService {
         return {'success': true, 'data': data['device']};
       }
       return {'success': false, 'message': data['message'] ?? 'Failed to save device'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error during upload.'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> uploadDeviceImages({
+    required String deviceId,
+    XFile? deviceImage,
+    XFile? deviceSim,
+  }) async {
+    try {
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/device-registry/$deviceId/images'));
+      
+      final token = UserSession().token;
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
+      // Add files safely for web
+      if (deviceImage != null) {
+        final bytes = await deviceImage.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes('device_image', bytes, filename: deviceImage.name));
+      }
+      
+      if (deviceSim != null) {
+        final bytes = await deviceSim.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes('device_sim', bytes, filename: deviceSim.name));
+      }
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+      var data = jsonDecode(response.body);
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return {'success': true, 'data': data['device']};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Failed to upload images'};
     } catch (e) {
       return {'success': false, 'message': 'Network error during upload.'};
     }

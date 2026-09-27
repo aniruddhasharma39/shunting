@@ -715,11 +715,96 @@ const deleteRegistryDevice = async (req, res) => {
   }
 };
 
+// @desc    Upload device/sim images for an existing device
+// @route   POST /api/device-registry/:deviceId/images
+// @access  Hardware Engineer / Super Admin / Yard Admin
+const uploadDeviceImagesOnly = async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    
+    if (!req.files || (!req.files.device_image && !req.files.device_sim)) {
+      return res.status(400).json({ success: false, message: 'No images provided for upload' });
+    }
+
+    let deviceImageUrl = null;
+    let simImageUrl = null;
+
+    if (req.files.device_image && req.files.device_image[0]) {
+      const file = req.files.device_image[0];
+      const publicId = `${deviceId}_device_image`;
+      try {
+        deviceImageUrl = await uploadToCloudinary(file.buffer, publicId);
+      } catch (e) {
+        console.error('Cloudinary Upload Error (device_image):', e);
+      }
+    }
+    
+    if (req.files.device_sim && req.files.device_sim[0]) {
+      const file = req.files.device_sim[0];
+      const publicId = `${deviceId}_device_sim`;
+      try {
+        simImageUrl = await uploadToCloudinary(file.buffer, publicId);
+      } catch (e) {
+        console.error('Cloudinary Upload Error (device_sim):', e);
+      }
+    }
+
+    // Update in device_registry
+    let updateQuery = 'UPDATE device_registry SET updated_at = CURRENT_TIMESTAMP';
+    let params = [];
+    
+    if (deviceImageUrl) {
+      params.push(deviceImageUrl);
+      updateQuery += `, device_image_url = $${params.length}`;
+    }
+    if (simImageUrl) {
+      params.push(simImageUrl);
+      updateQuery += `, sim_image_url = $${params.length}`;
+    }
+    
+    params.push(deviceId);
+    updateQuery += ` WHERE device_id = $${params.length} OR id::text = $${params.length} RETURNING *`;
+
+    const result = await db.query(updateQuery, params);
+
+    // Always attempt to update in devices table as well
+    let devUpdateQuery = 'UPDATE devices SET updated_at = CURRENT_TIMESTAMP';
+    let devParams = [];
+    if (deviceImageUrl) {
+      devParams.push(deviceImageUrl);
+      devUpdateQuery += `, device_image_url = $${devParams.length}`;
+    }
+    if (simImageUrl) {
+      devParams.push(simImageUrl);
+      devUpdateQuery += `, sim_image_url = $${devParams.length}`;
+    }
+    devParams.push(deviceId);
+    devUpdateQuery += ` WHERE device_code = $${devParams.length} OR id::text = $${devParams.length} RETURNING *`;
+    
+    const devResult = await db.query(devUpdateQuery, devParams);
+
+    if (result.rows.length === 0 && devResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Device not found in registry or telemetry tables' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Images updated successfully',
+      device: result.rows[0] || devResult.rows[0] || {}
+    });
+
+  } catch (error) {
+    console.error('Error in uploadDeviceImagesOnly:', error);
+    res.status(500).json({ success: false, message: 'Server error updating images' });
+  }
+};
+
 module.exports = {
   getRegistryDevices,
   getRegistryDeviceById,
   getLiveTelemetry,
   ingestDeviceTelemetry,
   upsertRegistryDevice,
-  deleteRegistryDevice
+  deleteRegistryDevice,
+  uploadDeviceImagesOnly
 };
