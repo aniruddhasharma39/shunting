@@ -1237,16 +1237,16 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
     String productType = 'RECEIVER';
     bool isSubmitting = false;
     
-    File? deviceImageFile;
-    File? simImageFile;
+    XFile? deviceImageFile;
+    XFile? simImageFile;
     final ImagePicker picker = ImagePicker();
 
     Future<void> pickImage(bool isDevice) async {
       try {
         final XFile? picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
         if (picked != null) {
-          if (isDevice) deviceImageFile = File(picked.path);
-          else simImageFile = File(picked.path);
+          if (isDevice) deviceImageFile = picked;
+          else simImageFile = picked;
         }
       } catch (e) {
         // Handle error
@@ -1440,8 +1440,8 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
 
                                     final res = await ApiService.upsertDeviceRegistryWithImages(
                                       payload: payload,
-                                      deviceImagePath: deviceImageFile?.path,
-                                      deviceSimPath: simImageFile?.path,
+                                      deviceImage: deviceImageFile,
+                                      deviceSim: simImageFile,
                                     );
 
                                     if (context.mounted) {
@@ -1495,8 +1495,8 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
   }
 
   void _showUpdateImageDialog(String deviceId) {
-    File? deviceImageFile;
-    File? simImageFile;
+    XFile? deviceImageFile;
+    XFile? simImageFile;
     final ImagePicker picker = ImagePicker();
     bool isUploading = false;
 
@@ -1505,8 +1505,8 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
         final XFile? picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
         if (picked != null) {
           setModalState(() {
-            if (isDevice) deviceImageFile = File(picked.path);
-            else simImageFile = File(picked.path);
+            if (isDevice) deviceImageFile = picked;
+            else simImageFile = picked;
           });
         }
       } catch (e) {
@@ -1568,8 +1568,8 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                           setModalState(() => isUploading = true);
                           final res = await ApiService.uploadDeviceImages(
                             deviceId: deviceId,
-                            deviceImagePath: deviceImageFile?.path,
-                            deviceSimPath: simImageFile?.path,
+                            deviceImage: deviceImageFile,
+                            deviceSim: simImageFile,
                           );
                           if (mounted) {
                             Navigator.pop(dialogContext);

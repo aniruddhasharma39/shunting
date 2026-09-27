@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'user_session.dart';
 
 class ApiService {
@@ -488,8 +489,8 @@ class ApiService {
 
   static Future<Map<String, dynamic>> upsertDeviceRegistryWithImages({
     required Map<String, dynamic> payload,
-    String? deviceImagePath,
-    String? deviceSimPath,
+    XFile? deviceImage,
+    XFile? deviceSim,
   }) async {
     try {
       var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/device-registry'));
@@ -510,13 +511,15 @@ class ApiService {
         }
       });
 
-      // Add files
-      if (deviceImagePath != null && deviceImagePath.isNotEmpty) {
-        request.files.add(await http.MultipartFile.fromPath('device_image', deviceImagePath));
+      // Add files safely for web
+      if (deviceImage != null) {
+        final bytes = await deviceImage.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes('device_image', bytes, filename: deviceImage.name));
       }
       
-      if (deviceSimPath != null && deviceSimPath.isNotEmpty) {
-        request.files.add(await http.MultipartFile.fromPath('device_sim', deviceSimPath));
+      if (deviceSim != null) {
+        final bytes = await deviceSim.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes('device_sim', bytes, filename: deviceSim.name));
       }
 
       var streamedResponse = await request.send();
@@ -534,8 +537,8 @@ class ApiService {
 
   static Future<Map<String, dynamic>> uploadDeviceImages({
     required String deviceId,
-    String? deviceImagePath,
-    String? deviceSimPath,
+    XFile? deviceImage,
+    XFile? deviceSim,
   }) async {
     try {
       var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/device-registry/$deviceId/images'));
@@ -545,13 +548,15 @@ class ApiService {
         request.headers['Authorization'] = 'Bearer $token';
       }
 
-      // Add files
-      if (deviceImagePath != null && deviceImagePath.isNotEmpty) {
-        request.files.add(await http.MultipartFile.fromPath('device_image', deviceImagePath));
+      // Add files safely for web
+      if (deviceImage != null) {
+        final bytes = await deviceImage.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes('device_image', bytes, filename: deviceImage.name));
       }
       
-      if (deviceSimPath != null && deviceSimPath.isNotEmpty) {
-        request.files.add(await http.MultipartFile.fromPath('device_sim', deviceSimPath));
+      if (deviceSim != null) {
+        final bytes = await deviceSim.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes('device_sim', bytes, filename: deviceSim.name));
       }
 
       var streamedResponse = await request.send();
