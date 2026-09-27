@@ -767,28 +767,30 @@ const uploadDeviceImagesOnly = async (req, res) => {
 
     const result = await db.query(updateQuery, params);
 
-    if (result.rows.length > 0) {
-      // Update in devices table as well
-      let devUpdateQuery = 'UPDATE devices SET updated_at = CURRENT_TIMESTAMP';
-      let devParams = [];
-      if (deviceImageUrl) {
-        devParams.push(deviceImageUrl);
-        devUpdateQuery += `, device_image_url = $${devParams.length}`;
-      }
-      if (simImageUrl) {
-        devParams.push(simImageUrl);
-        devUpdateQuery += `, sim_image_url = $${devParams.length}`;
-      }
-      devParams.push(deviceId);
-      devUpdateQuery += ` WHERE device_code = $${devParams.length} OR id::text = $${devParams.length}`;
-      
-      await db.query(devUpdateQuery, devParams);
+    // Always attempt to update in devices table as well
+    let devUpdateQuery = 'UPDATE devices SET updated_at = CURRENT_TIMESTAMP';
+    let devParams = [];
+    if (deviceImageUrl) {
+      devParams.push(deviceImageUrl);
+      devUpdateQuery += `, device_image_url = $${devParams.length}`;
+    }
+    if (simImageUrl) {
+      devParams.push(simImageUrl);
+      devUpdateQuery += `, sim_image_url = $${devParams.length}`;
+    }
+    devParams.push(deviceId);
+    devUpdateQuery += ` WHERE device_code = $${devParams.length} OR id::text = $${devParams.length} RETURNING *`;
+    
+    const devResult = await db.query(devUpdateQuery, devParams);
+
+    if (result.rows.length === 0 && devResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Device not found in registry or telemetry tables' });
     }
 
     res.json({
       success: true,
       message: 'Images updated successfully',
-      device: result.rows[0] || {}
+      device: result.rows[0] || devResult.rows[0] || {}
     });
 
   } catch (error) {
