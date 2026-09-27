@@ -1287,6 +1287,31 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
     );
   }
 
+  Future<ImageSource?> _showImageSourceDialog(BuildContext context) async {
+    return await showDialog<ImageSource>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        title: const Text('Select Image Source', style: TextStyle(color: Colors.white, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Color(0xFF38BDF8)),
+              title: const Text('Camera', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Color(0xFF38BDF8)),
+              title: const Text('Gallery', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showAddDeviceModal(BuildContext parentContext) {
     final devIdCtrl = TextEditingController();
     final devNameCtrl = TextEditingController();
@@ -1303,8 +1328,10 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
     final ImagePicker picker = ImagePicker();
 
     Future<void> pickImage(bool isDevice) async {
+      final ImageSource? source = await _showImageSourceDialog(parentContext);
+      if (source == null) return;
       try {
-        final XFile? picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+        final XFile? picked = await picker.pickImage(source: source, imageQuality: 70);
         if (picked != null) {
           if (isDevice) deviceImageFile = picked;
           else simImageFile = picked;
@@ -1531,13 +1558,7 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
-                            child: isSubmitting
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                  )
-                                : const Text(
+                            child: const Text(
                                     'REGISTER DEVICE',
                                     style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
                                   ),
@@ -1546,6 +1567,12 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                       ],
                     ),
                   ),
+                  if (isSubmitting) ...[
+                    const SizedBox(height: 16),
+                    const LinearProgressIndicator(color: Color(0xFF38BDF8), backgroundColor: Colors.white12),
+                    const SizedBox(height: 8),
+                    const Center(child: Text('Uploading and saving device...', style: TextStyle(color: Colors.white54, fontSize: 12))),
+                  ],
                 ],
               ),
             );
@@ -1562,8 +1589,10 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
     bool isUploading = false;
 
     Future<void> pickImage(bool isDevice, StateSetter setModalState) async {
+      final ImageSource? source = await _showImageSourceDialog(context);
+      if (source == null) return;
       try {
-        final XFile? picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+        final XFile? picked = await picker.pickImage(source: source, imageQuality: 70);
         if (picked != null) {
           setModalState(() {
             if (isDevice) deviceImageFile = picked;
@@ -1613,7 +1642,9 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                   ),
                   if (isUploading) ...[
                     const SizedBox(height: 20),
-                    const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8))),
+                    const LinearProgressIndicator(color: Color(0xFF38BDF8), backgroundColor: Colors.white12),
+                    const SizedBox(height: 8),
+                    const Center(child: Text('Uploading images...', style: TextStyle(color: Colors.white54, fontSize: 12))),
                   ],
                 ],
               ),
