@@ -1574,7 +1574,7 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                           if (mounted) {
                             Navigator.pop(dialogContext);
                             if (res['success']) {
-                              _fetchDevices();
+                              _fetchInventory();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Images updated successfully'), backgroundColor: Colors.green),
                               );
