@@ -6,7 +6,8 @@ const {
   getLiveTelemetry,
   ingestDeviceTelemetry,
   upsertRegistryDevice,
-  deleteRegistryDevice
+  deleteRegistryDevice,
+  uploadDeviceImagesOnly
 } = require('../controllers/deviceRegistryController');
 const { verifyToken, requireRole } = require('../middleware/authMiddleware');
 const multer = require('multer');
@@ -30,5 +31,8 @@ router.route('/')
 router.route('/:deviceId')
   .get(verifyToken, requireRole('super_admin', 'hardware_engineer', 'maintenance_user', 'yard_admin', 'viewer'), getRegistryDeviceById)
   .delete(verifyToken, requireRole('super_admin', 'hardware_engineer', 'yard_admin'), deleteRegistryDevice);
+
+router.route('/:deviceId/images')
+  .post(verifyToken, requireRole('super_admin', 'hardware_engineer', 'yard_admin'), upload.fields([{ name: 'device_image', maxCount: 1 }, { name: 'device_sim', maxCount: 1 }]), uploadDeviceImagesOnly);
 
 module.exports = router;

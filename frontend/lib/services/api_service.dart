@@ -532,6 +532,41 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> uploadDeviceImages({
+    required String deviceId,
+    String? deviceImagePath,
+    String? deviceSimPath,
+  }) async {
+    try {
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/device-registry/$deviceId/images'));
+      
+      final token = UserSession().token;
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
+      // Add files
+      if (deviceImagePath != null && deviceImagePath.isNotEmpty) {
+        request.files.add(await http.MultipartFile.fromPath('device_image', deviceImagePath));
+      }
+      
+      if (deviceSimPath != null && deviceSimPath.isNotEmpty) {
+        request.files.add(await http.MultipartFile.fromPath('device_sim', deviceSimPath));
+      }
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+      var data = jsonDecode(response.body);
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return {'success': true, 'data': data['device']};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Failed to upload images'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error during upload.'};
+    }
+  }
+
   /// Delete device from device_registry and device_telemetry
   static Future<Map<String, dynamic>> deleteDeviceRegistry(String deviceId) async {
     try {

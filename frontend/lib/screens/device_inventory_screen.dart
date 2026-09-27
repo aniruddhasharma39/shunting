@@ -1001,20 +1001,34 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                 ],
               ),
             ),
-            
-            // Render Device and SIM images if present
-            if (device['device_image_url'] != null || device['sim_image_url'] != null) ...[
-              const Divider(color: Color(0xFF334155), height: 1),
-              Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'DEVICE IMAGES',
-                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
+            // Render Device and SIM images
+            const Divider(color: Color(0xFF334155), height: 1),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'DEVICE IMAGES',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                      TextButton.icon(
+                        onPressed: () => _showUpdateImageDialog(deviceId),
+                        icon: const Icon(Icons.upload, size: 14, color: Color(0xFF38BDF8)),
+                        label: const Text('Update Images', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 11)),
+                        style: TextButton.styleFrom(
+                          minimumSize: Size.zero,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (device['device_image_url'] != null || device['sim_image_url'] != null)
                     Row(
                       children: [
                         if (device['device_image_url'] != null)
@@ -1058,11 +1072,27 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                             ),
                           ),
                       ],
+                    )
+                  else
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.02),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: const Column(
+                        children: [
+                          Icon(Icons.image_not_supported, color: Colors.white24, size: 32),
+                          SizedBox(height: 8),
+                          Text('No images available', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                        ],
+                      ),
                     ),
-                  ],
-                ),
+                ],
               ),
-            ],
+            ),
           ],
 
           // Card Action Buttons
@@ -1457,6 +1487,108 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                   ),
                 ],
               ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showUpdateImageDialog(String deviceId) {
+    File? deviceImageFile;
+    File? simImageFile;
+    final ImagePicker picker = ImagePicker();
+    bool isUploading = false;
+
+    Future<void> pickImage(bool isDevice, StateSetter setModalState) async {
+      try {
+        final XFile? picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+        if (picked != null) {
+          setModalState(() {
+            if (isDevice) deviceImageFile = File(picked.path);
+            else simImageFile = File(picked.path);
+          });
+        }
+      } catch (e) {
+        // Handle error
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF0F172A),
+              title: const Text('Update Device Images', style: TextStyle(color: Colors.white, fontSize: 16)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => pickImage(true, setModalState),
+                    icon: Icon(deviceImageFile != null ? Icons.check_circle : Icons.camera_alt,
+                        color: deviceImageFile != null ? Colors.green : const Color(0xFF38BDF8), size: 16),
+                    label: Text(deviceImageFile != null ? 'Device Selected' : 'Select Device Photo',
+                        style: TextStyle(color: deviceImageFile != null ? Colors.green : const Color(0xFF38BDF8))),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      side: BorderSide(color: deviceImageFile != null ? Colors.green : const Color(0xFF38BDF8)),
+                      minimumSize: const Size(double.infinity, 44),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => pickImage(false, setModalState),
+                    icon: Icon(simImageFile != null ? Icons.check_circle : Icons.sim_card,
+                        color: simImageFile != null ? Colors.green : const Color(0xFF38BDF8), size: 16),
+                    label: Text(simImageFile != null ? 'SIM Selected' : 'Select SIM Photo',
+                        style: TextStyle(color: simImageFile != null ? Colors.green : const Color(0xFF38BDF8))),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      side: BorderSide(color: simImageFile != null ? Colors.green : const Color(0xFF38BDF8)),
+                      minimumSize: const Size(double.infinity, 44),
+                    ),
+                  ),
+                  if (isUploading) ...[
+                    const SizedBox(height: 20),
+                    const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8))),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isUploading ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                ),
+                ElevatedButton(
+                  onPressed: (deviceImageFile == null && simImageFile == null) || isUploading
+                      ? null
+                      : () async {
+                          setModalState(() => isUploading = true);
+                          final res = await ApiService.uploadDeviceImages(
+                            deviceId: deviceId,
+                            deviceImagePath: deviceImageFile?.path,
+                            deviceSimPath: simImageFile?.path,
+                          );
+                          if (mounted) {
+                            Navigator.pop(dialogContext);
+                            if (res['success']) {
+                              _fetchDevices();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Images updated successfully'), backgroundColor: Colors.green),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(res['message'] ?? 'Failed to update images'), backgroundColor: Colors.red),
+                              );
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
+                  child: const Text('Upload', style: TextStyle(color: Colors.white)),
+                ),
+              ],
             );
           },
         );
