@@ -203,6 +203,25 @@ exports.handler = async (event, context) => {
         signal: signal
       });
 
+      const readings = event.readings || {};
+      const selectedTargetId = readings.selected_target_id ?? event.selected_target_id;
+
+      if (selectedTargetId === 0) {
+        await client.query(`
+          UPDATE shunting_sessions
+          SET 
+            session_end = NOW(),
+            end_time = NOW(),
+            session_status = 'COMPLETED',
+            status = 'COMPLETED',
+            manual_close_reason = 'Hardware un-paired (target=0)',
+            updated_at = NOW()
+          WHERE (rx_device_id = $1 OR ld_code = $1) AND (status = 'LIVE' OR session_status = 'LIVE')
+        `, [rxId]);
+        await client.end();
+        return { statusCode: 200, body: JSON.stringify({ success: true, message: 'Unpaired' }) };
+      }
+
       const updateRes = await client.query(`
         UPDATE shunting_sessions
         SET 
