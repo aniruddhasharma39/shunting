@@ -54,6 +54,12 @@ exports.handler = async (event, context) => {
     return { statusCode: 400, body: 'Missing deviceId' };
   }
 
+  // Normalize device ID by extracting the base device code (e.g. RX-05, TX-14) from complex AWS IoT Thing names (e.g. SHN-NWR-JP-KWP-RX-05)
+  const match = deviceId.match(/(RX-\d+|TX-\d+|DE-\d+|LD-\d+)$/);
+  if (match) {
+    deviceId = match[1];
+  }
+
   // Extract metrics
   const diagnostics = event.diagnostics || {};
   const readings = event.readings || {};
@@ -200,15 +206,18 @@ exports.handler = async (event, context) => {
       `, [point, distanceCm, txId, rxId]);
 
       if (updateRes.rowCount === 0) {
-        const sessionCode = `SES-${Date.now().toString().slice(-6)}-${rxId}`;
-        await client.query(`
-          INSERT INTO shunting_sessions (
-            session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
-            session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
-            minimum_distance, distance_trajectory, created_at, updated_at
-          ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4, $4 / 100.0, $4 / 100.0, $5::jsonb, NOW(), NOW())
-        `, [sessionCode, rxId, txId, distanceCm, JSON.stringify([JSON.parse(point)])]);
-        console.log(`[Lambda] Auto-created live session: ${rxId} <--> ${txId}`);
+        const isExplicitlyPaired = event.paired_tx_id || event.paired_rx_id || event.paired_device || event.status === 'PAIRED' || event.event === 'PAIR_START';
+        if (isExplicitlyPaired) {
+          const sessionCode = `SES-${Date.now().toString().slice(-6)}-${rxId}`;
+          await client.query(`
+            INSERT INTO shunting_sessions (
+              session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
+              session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
+              minimum_distance, distance_trajectory, created_at, updated_at
+            ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4, $4 / 100.0, $4 / 100.0, $5::jsonb, NOW(), NOW())
+          `, [sessionCode, rxId, txId, distanceCm, JSON.stringify([JSON.parse(point)])]);
+          console.log(`[Lambda] Auto-created live session: ${rxId} <--> ${txId}`);
+        }
       }
     }
 

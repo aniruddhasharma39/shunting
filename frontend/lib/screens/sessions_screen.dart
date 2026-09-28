@@ -643,24 +643,54 @@ class _SessionsScreenState extends State<SessionsScreen> {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        _buildHistoryDeviceTag(session['ldDevice'] ?? 'RX', Icons.train, Colors.lightBlueAccent),
+                        Expanded(
+                          child: _buildHistoryDeviceTag(session['ldDevice'] ?? 'RX', Icons.train, Colors.lightBlueAccent, label: 'RECEIVER'),
+                        ),
                         const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8.0),
-                          child: Icon(Icons.sync_alt, size: 14, color: Colors.white38),
+                          child: Icon(Icons.sync_alt, size: 16, color: Colors.cyanAccent),
                         ),
-                        _buildHistoryDeviceTag(session['deDevice'] ?? 'TX', Icons.sensors, Colors.amberAccent),
-                        const Spacer(),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            const Text('Final Placement', style: TextStyle(fontSize: 10, color: Colors.white38)),
-                            Text(
-                              session['finalPlacement'] ?? session['distance'] ?? 'N/A',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent, fontSize: 16),
-                            ),
-                          ],
+                        Expanded(
+                          child: _buildHistoryDeviceTag(session['deDevice'] ?? 'TX', Icons.sensors, Colors.amberAccent, label: 'TRANSMITTER'),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Min Proximity', style: TextStyle(fontSize: 10, color: Colors.white38)),
+                              const SizedBox(height: 2),
+                              Text(
+                                session['minDistance'] ?? '--m',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orangeAccent, fontSize: 15),
+                              ),
+                            ],
+                          ),
+                          const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.white24),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              const Text('Final Placement', style: TextStyle(fontSize: 10, color: Colors.white38)),
+                              const SizedBox(height: 2),
+                              Text(
+                                session['finalPlacement'] ?? session['distance'] ?? 'N/A',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent, fontSize: 15),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                     const Divider(height: 24, color: Colors.white10),
                     Row(
@@ -798,19 +828,27 @@ class _SessionsScreenState extends State<SessionsScreen> {
     );
   }
 
-  Widget _buildHistoryDeviceTag(String deviceId, IconData icon, Color color) {
+  Widget _buildHistoryDeviceTag(String deviceId, IconData icon, Color color, {String? label}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
-          Text(deviceId, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+          if (label != null)
+            Text(label, style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 9, fontWeight: FontWeight.bold)),
+          if (label != null) const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 6),
+              Flexible(child: Text(deviceId, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis)),
+            ],
+          ),
         ],
       ),
     );
@@ -1213,13 +1251,29 @@ class _SessionAuditDialogState extends State<SessionAuditDialog> with SingleTick
 
     if (_tabularLogs.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.table_rows_outlined, color: Colors.white24, size: 48),
-            SizedBox(height: 12),
-            Text('No telemetry log points recorded for this session.', style: TextStyle(color: Colors.white38)),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.cyanAccent.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.data_usage, color: Colors.cyanAccent, size: 48),
+              ),
+              const SizedBox(height: 20),
+              const Text('Process Log Unavailable', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
+              const Text(
+                'Granular telemetry logs for this session have been archived or were not recorded. The session data was successfully aggregated into the Final Placement summary in the Overview tab.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.5),
+              ),
+            ],
+          ),
         ),
       );
     }

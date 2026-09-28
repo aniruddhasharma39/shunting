@@ -94,13 +94,21 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             // Logo Icon Placeholder
             Container(
-              width: 72,
-              height: 72,
+              width: 120,
+              height: 120,
               decoration: BoxDecoration(
                 color: AppTheme.primaryColor,
-                borderRadius: BorderRadius.circular(16),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primaryColor.withAlpha(80),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-              child: const Icon(Icons.shield_outlined, color: Colors.white, size: 40),
+              child: const Icon(Icons.shield_outlined, color: Colors.white, size: 64),
             ),
             const SizedBox(height: 16),
             const Text(

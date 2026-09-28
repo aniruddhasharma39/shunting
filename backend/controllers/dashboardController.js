@@ -167,6 +167,10 @@ const getDashboardSummary = async (req, res) => {
         seenLdDevices.add(rxId);
 
         const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : (row.payload || {});
+        
+        const isExplicitlyPaired = payload.paired_tx_id || payload.paired_rx_id || payload.paired_device || payload.status === 'PAIRED' || payload.event === 'PAIR_START';
+        if (!isExplicitlyPaired) continue;
+        
         const distVal = row.distance_cm ?? payload.readings?.distance_cm ?? payload.distance_cm ?? (payload.distance ? Math.round(Number(payload.distance) * 100) : null);
         let realDistance = '--m';
         let isClosing = false;

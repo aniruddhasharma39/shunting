@@ -144,6 +144,12 @@ class AwsIotBridge {
     }
     deviceId = deviceId || 'UNKNOWN';
 
+    // Normalize device ID by extracting the base device code (e.g. RX-05, TX-14) from complex AWS IoT Thing names (e.g. SHN-NWR-JP-KWP-RX-05)
+    const match = deviceId.match(/(RX-\d+|TX-\d+|DE-\d+|LD-\d+)$/);
+    if (match) {
+      deviceId = match[1];
+    }
+
     // Extract common metrics
     const battery = payloadObj.battery_pct ?? payloadObj.battery_level ?? payloadObj.battery ?? null;
     const signal = payloadObj.gsm_rssi ?? payloadObj.signal_rssi ?? payloadObj.signal ?? null;
@@ -399,15 +405,18 @@ class AwsIotBridge {
 
         // If no active shunting session exists yet, auto-create one when distance streaming begins
         if (updateRes.rowCount === 0) {
-          const sessionCode = `SES-${Date.now().toString().slice(-6)}-${rxId}`;
-          await db.query(`
-            INSERT INTO shunting_sessions (
-              session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
-              session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
-              minimum_distance, distance_trajectory, created_at, updated_at
-            ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4, $4 / 100.0, $4 / 100.0, $5::jsonb, NOW(), NOW())
-          `, [sessionCode, rxId, txId, distanceCm, JSON.stringify([JSON.parse(point)])]);
-          console.log(`🚂 [SHUTTLE SESSION AUTO-START] Streaming from ${rxId} <--> ${txId}`);
+          const isExplicitlyPaired = payload.paired_tx_id || payload.paired_rx_id || payload.paired_device || payload.status === 'PAIRED' || payload.event === 'PAIR_START';
+          if (isExplicitlyPaired) {
+            const sessionCode = `SES-${Date.now().toString().slice(-6)}-${rxId}`;
+            await db.query(`
+              INSERT INTO shunting_sessions (
+                session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
+                session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
+                minimum_distance, distance_trajectory, created_at, updated_at
+              ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4, $4 / 100.0, $4 / 100.0, $5::jsonb, NOW(), NOW())
+            `, [sessionCode, rxId, txId, distanceCm, JSON.stringify([JSON.parse(point)])]);
+            console.log(`🚂 [SHUTTLE SESSION AUTO-START] Streaming from ${rxId} <--> ${txId}`);
+          }
         }
       }
 

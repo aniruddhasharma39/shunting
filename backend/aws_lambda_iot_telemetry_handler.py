@@ -211,16 +211,18 @@ def lambda_handler(event, context):
             """, (point, distance_cm, distance_cm, distance_cm, distance_cm, tx_id, tx_id, rx_id, rx_id))
 
             if cur.rowcount == 0:
-                # Auto create live session for this pair
-                session_code = f"SES-{str(int(time.time()))[-6:]}-{rx_id}"
-                cur.execute("""
-                    INSERT INTO shunting_sessions (
-                        session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
-                        session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
-                        minimum_distance, distance_trajectory, created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW(), 'LIVE', 'LIVE', %s, %s / 100.0, %s / 100.0, %s::jsonb, NOW(), NOW())
-                """, (session_code, session_code, rx_id, rx_id, tx_id, tx_id, distance_cm, distance_cm, distance_cm, json.dumps([json.loads(point)])))
-                print(f"Auto-started live shunting session: {rx_id} <--> {tx_id}")
+                # Auto create live session for this pair only if explicitly paired
+                is_explicitly_paired = event.get("paired_tx_id") or event.get("paired_rx_id") or event.get("paired_device") or event.get("status") == "PAIRED" or event.get("event") == "PAIR_START"
+                if is_explicitly_paired:
+                    session_code = f"SES-{str(int(time.time()))[-6:]}-{rx_id}"
+                    cur.execute("""
+                        INSERT INTO shunting_sessions (
+                            session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
+                            session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
+                            minimum_distance, distance_trajectory, created_at, updated_at
+                        ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW(), 'LIVE', 'LIVE', %s, %s / 100.0, %s / 100.0, %s::jsonb, NOW(), NOW())
+                    """, (session_code, session_code, rx_id, rx_id, tx_id, tx_id, distance_cm, distance_cm, distance_cm, json.dumps([json.loads(point)])))
+                    print(f"Auto-started live shunting session: {rx_id} <--> {tx_id}")
 
         # 5. Insert into legacy telemetry_data for backward compatibility
         try:
