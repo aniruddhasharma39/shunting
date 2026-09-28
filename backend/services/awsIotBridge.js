@@ -213,6 +213,16 @@ class AwsIotBridge {
     if (payload.paired_rx_id) return payload.paired_rx_id;
     if (payload.paired_device) return payload.paired_device;
 
+    const readings = payload.readings || {};
+    const selectedTargetId = readings.selected_target_id || payload.selected_target_id;
+    if (selectedTargetId && selectedTargetId > 0) {
+      if (deviceId.startsWith('RX-') || deviceId.startsWith('LD-')) {
+        return `TX-${String(selectedTargetId).padStart(2, '0')}`;
+      } else {
+        return `RX-${String(selectedTargetId).padStart(2, '0')}`;
+      }
+    }
+
     if (deviceId.startsWith('TX-') || deviceId.startsWith('DE-')) {
       const num = deviceId.split('-')[1];
       return `RX-${num}`;
@@ -405,7 +415,9 @@ class AwsIotBridge {
 
         // If no active shunting session exists yet, auto-create one when distance streaming begins
         if (updateRes.rowCount === 0) {
-          const isExplicitlyPaired = payload.paired_tx_id || payload.paired_rx_id || payload.paired_device || payload.status === 'PAIRED' || payload.event === 'PAIR_START';
+          const readings = payload.readings || {};
+          const selectedTargetId = readings.selected_target_id || payload.selected_target_id;
+          const isExplicitlyPaired = payload.paired_tx_id || payload.paired_rx_id || payload.paired_device || payload.status === 'PAIRED' || payload.event === 'PAIR_START' || (selectedTargetId && selectedTargetId > 0);
           if (isExplicitlyPaired) {
             const sessionCode = `SES-${Date.now().toString().slice(-6)}-${rxId}`;
             await db.query(`
