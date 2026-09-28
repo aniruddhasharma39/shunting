@@ -110,6 +110,13 @@ exports.generatePDF = async (req, res) => {
     const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'portrait' });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${(reportType || 'Report').replace(/ /g, '_')}.pdf"`);
+    
+    const streamPromise = new Promise((resolve, reject) => {
+      res.on('finish', resolve);
+      res.on('error', reject);
+      doc.on('error', reject);
+    });
+
     doc.pipe(res);
     
     doc.fontSize(20).text('SafeShunt - Reports & Audits', { align: 'center' });
@@ -137,6 +144,7 @@ exports.generatePDF = async (req, res) => {
     });
     
     doc.end();
+    await streamPromise;
   } catch (error) {
     console.error("PDF Generation Error:", error);
     if (!res.headersSent) {
@@ -329,6 +337,13 @@ exports.generateSessionPDF = async (req, res) => {
     const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'portrait' });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="Session_Report_${session.session_code}.pdf"`);
+    
+    const streamPromise = new Promise((resolve, reject) => {
+      res.on('finish', resolve);
+      res.on('error', reject);
+      doc.on('error', reject);
+    });
+
     doc.pipe(res);
 
     // Title & Header
@@ -382,6 +397,7 @@ exports.generateSessionPDF = async (req, res) => {
     });
 
     doc.end();
+    await streamPromise;
   } catch (error) {
     console.error('Session PDF Error:', error);
     if (!res.headersSent) {
