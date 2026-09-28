@@ -35,6 +35,14 @@ def derive_paired_device(device_id, payload):
     if payload.get("paired_device"):
         return payload["paired_device"]
 
+    readings = payload.get("readings", {}) if isinstance(payload.get("readings"), dict) else {}
+    selected_target = readings.get("selected_target_id") or payload.get("selected_target_id")
+    if selected_target and int(selected_target) > 0:
+        if device_id.startswith("RX-") or device_id.startswith("LD-"):
+            return f"TX-{str(selected_target).zfill(2)}"
+        else:
+            return f"RX-{str(selected_target).zfill(2)}"
+
     # Match numeric suffix (e.g. TX-03 <-> RX-03, TX-01 <-> RX-01)
     if device_id.startswith("TX-") or device_id.startswith("DE-"):
         num = device_id.split("-")[1]
@@ -212,7 +220,9 @@ def lambda_handler(event, context):
 
             if cur.rowcount == 0:
                 # Auto create live session for this pair only if explicitly paired
-                is_explicitly_paired = event.get("paired_tx_id") or event.get("paired_rx_id") or event.get("paired_device") or event.get("status") == "PAIRED" or event.get("event") == "PAIR_START"
+                readings_obj = event.get("readings", {}) if isinstance(event.get("readings"), dict) else {}
+                selected_target = readings_obj.get("selected_target_id") or event.get("selected_target_id")
+                is_explicitly_paired = event.get("paired_tx_id") or event.get("paired_rx_id") or event.get("paired_device") or event.get("status") == "PAIRED" or event.get("event") == "PAIR_START" or (selected_target and int(selected_target) > 0)
                 if is_explicitly_paired:
                     session_code = f"SES-{str(int(time.time()))[-6:]}-{rx_id}"
                     cur.execute("""

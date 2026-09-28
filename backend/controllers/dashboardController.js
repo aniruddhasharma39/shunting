@@ -168,7 +168,9 @@ const getDashboardSummary = async (req, res) => {
 
         const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : (row.payload || {});
         
-        const isExplicitlyPaired = payload.paired_tx_id || payload.paired_rx_id || payload.paired_device || payload.status === 'PAIRED' || payload.event === 'PAIR_START';
+        const readings = payload.readings || {};
+        const selectedTargetId = readings.selected_target_id || payload.selected_target_id;
+        const isExplicitlyPaired = payload.paired_tx_id || payload.paired_rx_id || payload.paired_device || payload.status === 'PAIRED' || payload.event === 'PAIR_START' || (selectedTargetId && selectedTargetId > 0);
         if (!isExplicitlyPaired) continue;
         
         const distVal = row.distance_cm ?? payload.readings?.distance_cm ?? payload.distance_cm ?? (payload.distance ? Math.round(Number(payload.distance) * 100) : null);

@@ -21,6 +21,16 @@ function derivePairedDevice(deviceId, payload) {
   if (payload.paired_rx_id) return payload.paired_rx_id;
   if (payload.paired_device) return payload.paired_device;
 
+  const readings = payload.readings || {};
+  const selectedTargetId = readings.selected_target_id || payload.selected_target_id;
+  if (selectedTargetId && selectedTargetId > 0) {
+    if (deviceId.startsWith('RX-') || deviceId.startsWith('LD-')) {
+      return `TX-${String(selectedTargetId).padStart(2, '0')}`;
+    } else {
+      return `RX-${String(selectedTargetId).padStart(2, '0')}`;
+    }
+  }
+
   if (deviceId.startsWith('TX-') || deviceId.startsWith('DE-')) {
     const num = deviceId.split('-')[1];
     return `RX-${num}`;
@@ -206,7 +216,10 @@ exports.handler = async (event, context) => {
       `, [point, distanceCm, txId, rxId]);
 
       if (updateRes.rowCount === 0) {
-        const isExplicitlyPaired = event.paired_tx_id || event.paired_rx_id || event.paired_device || event.status === 'PAIRED' || event.event === 'PAIR_START';
+        const readings = event.readings || {};
+        const selectedTargetId = readings.selected_target_id || event.selected_target_id;
+        const isExplicitlyPaired = event.paired_tx_id || event.paired_rx_id || event.paired_device || event.status === 'PAIRED' || event.event === 'PAIR_START' || (selectedTargetId && selectedTargetId > 0);
+        
         if (isExplicitlyPaired) {
           const sessionCode = `SES-${Date.now().toString().slice(-6)}-${rxId}`;
           await client.query(`
