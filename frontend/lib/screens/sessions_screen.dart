@@ -1,14 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
 import '../widgets/app_drawer.dart';
 import '../services/api_service.dart';
-import 'live_telemetry_screen.dart';
-
-
-class SessionsScreen extends StatefulWidget {
+import 'live_telemetry_screen.dart';class SessionsScreen extends StatefulWidget {
   const SessionsScreen({super.key});
 
   @override
@@ -971,10 +971,25 @@ class _SessionAuditDialogState extends State<SessionAuditDialog> with SingleTick
   Future<void> _sharePdf() async {
     final sessionId = widget.session['id']?.toString() ?? widget.session['session_code']?.toString();
     if (sessionId == null) return;
+    
+    if (mounted) {
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Preparing PDF for sharing...'), backgroundColor: Colors.cyan, duration: Duration(seconds: 2)));
+    }
+    
     final url = ApiService.getSessionPdfUrl(sessionId);
     try {
-      await Share.share('SafeShunt Session Report: $url', subject: 'Session Report $sessionId');
-    } catch (_) {}
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+         final tempDir = await getTemporaryDirectory();
+         final file = File('${tempDir.path}/Session_Report_$sessionId.pdf');
+         await file.writeAsBytes(response.bodyBytes);
+         await Share.shareXFiles([XFile(file.path)], text: 'SafeShunt Session Report: $sessionId');
+      } else {
+         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to generate PDF for sharing'), backgroundColor: Colors.red));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error sharing PDF: $e')));
+    }
   }
 
   String _formatTime(dynamic val) {

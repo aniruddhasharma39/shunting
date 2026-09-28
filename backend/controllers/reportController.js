@@ -209,8 +209,8 @@ async function fetchSessionDataForReport(sessionId) {
     SELECT 
       ss.id,
       COALESCE(ss.session_code, ss.session_number, ('SES-' || SUBSTRING(ss.id::text, 1, 8))) as session_code,
-      COALESCE(ss.ld_code, ss.rx_device_id, 'RX-01') as ld_device,
-      COALESCE(ss.de_code, ss.tx_device_id, 'TX-01') as de_device,
+      COALESCE(ss.ld_code, ss.rx_device_id, 'N/A') as ld_device,
+      COALESCE(ss.de_code, ss.tx_device_id, 'N/A') as de_device,
       COALESCE(ss.start_time, ss.session_start, ss.created_at) as start_time,
       COALESCE(ss.end_time, ss.session_end) as end_time,
       ss.status,
@@ -218,12 +218,12 @@ async function fetchSessionDataForReport(sessionId) {
       ss.final_distance_cm,
       ss.minimum_distance,
       ss.distance_trajectory,
-      COALESCE(ss.employee_name, 'ian') as holder_name,
-      COALESCE(ss.employee_id_number, 'EMP-001') as holder_employee_id,
-      COALESCE(yl.line_name, 'Main Shunt Line') as line_name,
-      COALESCE(yl.line_number, '01') as line_number,
-      COALESCE(y.yard_name, 'North Yard') as yard_name,
-      COALESCE(y.yard_code, 'NY') as yard_code,
+      COALESCE(ss.employee_name, 'N/A') as holder_name,
+      COALESCE(ss.employee_id_number, 'N/A') as holder_employee_id,
+      COALESCE(yl.line_name, 'N/A') as line_name,
+      COALESCE(yl.line_number, 'N/A') as line_number,
+      COALESCE(y.yard_name, 'N/A') as yard_name,
+      COALESCE(y.yard_code, 'N/A') as yard_code,
       ss.manual_close_reason
     FROM shunting_sessions ss
     LEFT JOIN yard_lines yl ON ss.line_id = yl.id
@@ -244,83 +244,119 @@ async function fetchSessionDataForReport(sessionId) {
     }
   }
 
-  const logs = [];
+  // Normalize points
+  let points = [];
   if (Array.isArray(rawTrajectory) && rawTrajectory.length > 0) {
-    rawTrajectory.forEach((pt, idx) => {
-      const ts = pt.t ? new Date(pt.t).toISOString() : session?.start_time;
+    rawTrajectory.forEach(pt => {
+      const ts = pt.t ? new Date(pt.t) : new Date(session?.start_time);
       const dCm = pt.d_cm ?? pt.distance_cm ?? (pt.distance ? Math.round(Number(pt.distance) * 100) : null);
-      const dM = dCm != null ? (dCm / 100).toFixed(2) : '--';
-      const speed = pt.speed_kmh ?? 0.0;
-      const batt = pt.battery ?? 95;
-      const sig = pt.signal ?? -65;
-      const timeStr = new Date(ts).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false });
-      
-      let safety = 'NORMAL';
       if (dCm != null) {
-        if (dCm < 500) safety = 'CRITICAL HAZARD';
-        else if (dCm <= 2000) safety = 'APPROACHING';
-        else safety = 'SAFE CLEARANCE';
+        points.push({ time: ts, distCm: dCm, speed: pt.speed_kmh ?? 0.0, batt: pt.battery ?? null });
       }
-
-      logs.push([
-        (idx + 1).toString(),
-        timeStr,
-        `${dM} m`,
-        `${Number(speed).toFixed(1)} km/h`,
-        `${batt}%`,
-        `${sig} dBm`,
-        safety
-      ]);
     });
-  }
-
-  if (logs.length < 5 && session) {
+  } else if (session) {
     const telRes = await db.query(`
-      SELECT id, device_id, distance_cm, speed_kmh, battery_level, signal_rssi, recorded_at
+      SELECT distance_cm, speed_kmh, battery_level, recorded_at
       FROM device_telemetry
       WHERE (device_id = $1 OR device_id = $2)
         AND recorded_at >= ($3::timestamptz - INTERVAL '5 MINUTES')
         AND recorded_at <= ($4::timestamptz + INTERVAL '5 MINUTES')
-      ORDER BY recorded_at ASC LIMIT 200
+      ORDER BY recorded_at ASC LIMIT 1000
     `, [session.ld_device, session.de_device, session.start_time, session.end_time || new Date()]);
-
-    if (telRes.rows.length > 0) {
-      logs.length = 0;
-      telRes.rows.forEach((row, idx) => {
-        const dCm = row.distance_cm;
-        const dM = dCm != null ? (dCm / 100).toFixed(2) : '--';
-        const speed = row.speed_kmh ?? 0.0;
-        const batt = row.battery_level ?? 95;
-        const sig = row.signal_rssi ?? -65;
-        const timeStr = new Date(row.recorded_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false });
-
-        let safety = 'NORMAL';
-        if (dCm != null) {
-          if (dCm < 500) safety = 'CRITICAL HAZARD';
-          else if (dCm <= 2000) safety = 'APPROACHING';
-          else safety = 'SAFE CLEARANCE';
-        }
-
-        logs.push([
-          (idx + 1).toString(),
-          timeStr,
-          `${dM} m`,
-          `${Number(speed).toFixed(1)} km/h`,
-          `${batt}%`,
-          `${sig} dBm`,
-          safety
-        ]);
-      });
-    }
+    telRes.rows.forEach(row => {
+      if (row.distance_cm != null) {
+        points.push({ time: new Date(row.recorded_at), distCm: row.distance_cm, speed: row.speed_kmh ?? 0.0, batt: row.battery_level });
+      }
+    });
   }
 
-  return { session, logs };
+  // Filter based on distance
+  let filteredPoints = [];
+  let lastTime45 = 0;
+  let lastTime30 = 0;
+  let totalBatt = 0;
+  let battCount = 0;
+
+  points.sort((a,b) => a.time - b.time);
+
+  points.forEach(pt => {
+    if (pt.batt != null) { totalBatt += pt.batt; battCount++; }
+    
+    let distM = pt.distCm / 100;
+    let tMs = pt.time.getTime();
+
+    if (distM > 45) {
+      // Exclude completely
+      return;
+    } else if (distM > 30) {
+      // 10 second polling
+      if (tMs - lastTime45 >= 10000) {
+        filteredPoints.push(pt);
+        lastTime45 = tMs;
+      }
+    } else if (distM > 15) {
+      // 5 second polling
+      if (tMs - lastTime30 >= 5000) {
+        filteredPoints.push(pt);
+        lastTime30 = tMs;
+      }
+    } else {
+      // Max readings (all)
+      filteredPoints.push(pt);
+    }
+  });
+
+  // Group consecutive identical distances
+  let compressed = [];
+  let currentGroup = null;
+
+  filteredPoints.forEach(pt => {
+    if (!currentGroup) {
+      currentGroup = { startPt: pt, endPt: pt, count: 1 };
+    } else {
+      if (pt.distCm === currentGroup.startPt.distCm && pt.speed === currentGroup.startPt.speed) {
+        currentGroup.endPt = pt;
+        currentGroup.count++;
+      } else {
+        compressed.push(currentGroup);
+        currentGroup = { startPt: pt, endPt: pt, count: 1 };
+      }
+    }
+  });
+  if (currentGroup) compressed.push(currentGroup);
+
+  const logs = [];
+  compressed.forEach((grp, idx) => {
+    let t1 = grp.startPt.time.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false });
+    let t2 = grp.endPt.time.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false });
+    let timeStr = (t1 === t2) ? t1 : `${t1} - ${t2}`;
+    let dM = (grp.startPt.distCm / 100).toFixed(2);
+    
+    let zone = '';
+    if (grp.startPt.distCm > 3000) zone = '30-45m Zone (10s)';
+    else if (grp.startPt.distCm > 1500) zone = '15-30m Zone (5s)';
+    else zone = '<15m Zone (Max)';
+
+    logs.push([
+      (idx + 1).toString(),
+      timeStr,
+      `${dM} m`,
+      `${Number(grp.startPt.speed).toFixed(1)} km/h`,
+      zone
+    ]);
+  });
+
+  const avgBattery = battCount > 0 ? Math.round(totalBatt / battCount) : 95;
+  const initialDistance = points.length > 0 ? (points[0].distCm / 100).toFixed(2) : '--';
+  const finalDistance = points.length > 0 ? (points[points.length - 1].distCm / 100).toFixed(2) : '--';
+
+  return { session, logs, avgBattery, initialDistance, finalDistance };
 }
 
 exports.generateSessionPDF = async (req, res) => {
   try {
     const { id } = req.params;
-    const { session, logs } = await fetchSessionDataForReport(id);
+    const { session, logs, avgBattery, initialDistance, finalDistance } = await fetchSessionDataForReport(id);
 
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
@@ -331,10 +367,11 @@ exports.generateSessionPDF = async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="Session_Report_${session.session_code}.pdf"`);
     doc.pipe(res);
 
-    // Title & Header
-    doc.fontSize(20).text('SafeShunt - Hardware Session Audit Report', { align: 'center' });
+    // Title & Header (Professional Formal Style for Indian Railways)
+    doc.fontSize(22).font('Helvetica-Bold').text('INDIAN RAILWAYS', { align: 'center' });
+    doc.fontSize(16).font('Helvetica-Bold').text('SafeShunt - Official Session Audit Report', { align: 'center' });
     doc.moveDown(0.5);
-    doc.fontSize(10).text(`Generated On: ${new Date().toLocaleString()}`, { align: 'center' });
+    doc.fontSize(10).font('Helvetica').text(`Generated On: ${new Date().toLocaleString()}`, { align: 'center' });
     doc.moveDown(1.5);
 
     // Metadata Summary Section
@@ -346,21 +383,24 @@ exports.generateSessionPDF = async (req, res) => {
       `Session Code: ${session.session_code}`,
       `Receiver (Loco Unit): ${session.ld_device}`,
       `Transmitter (Dead-End): ${session.de_device}`,
-      `Loco Pilot / Holder: ${session.holder_name} (${session.holder_employee_id})`,
-      `Yard / Location: ${session.yard_name} (${session.yard_code})`
+      `Loco Pilot / Holder: ${session.holder_name === 'N/A' ? 'Not Assigned' : session.holder_name} (${session.holder_employee_id})`,
+      `Yard / Location: ${session.yard_name === 'N/A' ? 'Not Assigned' : session.yard_name} (${session.yard_code})`
     ];
 
     const metaRight = [
-      `Track / Pit Line: ${session.line_name} (Line ${session.line_number})`,
+      `Track / Pit Line: ${session.line_name === 'N/A' ? 'Not Assigned' : session.line_name} (Line ${session.line_number})`,
       `Session Start: ${session.start_time ? new Date(session.start_time).toLocaleString() : '--'}`,
       `Session End: ${session.end_time ? new Date(session.end_time).toLocaleString() : 'LIVE'}`,
-      `Final Placement Distance: ${session.final_distance_cm != null ? (session.final_distance_cm / 100).toFixed(2) + ' m' : '-- m'}`,
-      `Minimum Clearance Reached: ${session.minimum_distance != null ? Number(session.minimum_distance).toFixed(2) + ' m' : '-- m'}`
+      `Initial Shunting Distance: ${initialDistance} m`,
+      `Final Reached Distance: ${finalDistance} m`
     ];
 
     metaLeft.forEach((line, i) => {
       doc.text(`${line.padEnd(50)}   |   ${metaRight[i] || ''}`);
     });
+    
+    doc.moveDown(0.5);
+    doc.text(`Average Device Battery (Session Lifetime): ${avgBattery}%`);
 
     if (session.manual_close_reason) {
       doc.moveDown(0.5);
@@ -372,13 +412,20 @@ exports.generateSessionPDF = async (req, res) => {
     doc.moveDown(0.5);
 
     const tableData = {
-      headers: ['#', 'Time (IST)', 'Distance', 'Speed', 'Battery', 'Signal', 'Safety Status'],
-      rows: logs.length > 0 ? logs : [['1', '--:--', '-- m', '0.0 km/h', '95%', '-65 dBm', 'NORMAL']]
+      headers: ['#', 'Time Range (IST)', 'Distance', 'Speed', 'Distance Zone (Polling)'],
+      rows: logs.length > 0 ? logs : [['1', '--:--', '-- m', '0.0 km/h', 'No data < 45m']]
     };
 
     await doc.table(tableData, {
-      prepareHeader: () => doc.font("Helvetica-Bold").fontSize(9),
-      prepareRow: (row, indexColumn, indexRow, rectRow, rectCell) => doc.font("Helvetica").fontSize(8)
+      prepareHeader: () => doc.font("Helvetica-Bold").fontSize(10),
+      prepareRow: (row, indexColumn, indexRow, rectRow, rectCell) => {
+        // Apply slight background tinting dynamically based on Zone
+        const zone = row[4] || '';
+        if (indexColumn === 0 && zone !== 'Distance Zone (Polling)') {
+            doc.addBackground(rectRow, (zone.includes('<15m') ? '#ffebee' : (zone.includes('15-30m') ? '#fff3e0' : (zone.includes('30-45m') ? '#fffde7' : '#ffffff'))), doc);
+        }
+        doc.font("Helvetica").fontSize(9);
+      }
     });
 
     doc.end();
