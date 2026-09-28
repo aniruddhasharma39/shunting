@@ -76,36 +76,36 @@ const getDevices = async (req, res) => {
 
     let query = `
       SELECT 
-        d.id,
-        d.device_code,
+        COALESCE(d.id, dr.id) as id,
+        COALESCE(d.device_code, dr.device_id) as device_code,
         COALESCE(
           d.device_type,
           CASE 
-            WHEN dr.product_type ILIKE '%RECEIVER%' OR d.device_code ILIKE 'RX%' OR d.device_code ILIKE 'LD%' THEN 'Loco Unit'
-            WHEN dr.product_type ILIKE '%TRANSMITTER%' OR d.device_code ILIKE 'TX%' OR d.device_code ILIKE 'DE%' THEN 'Dead-End'
-            WHEN dr.product_type ILIKE '%REPEATER%' OR d.device_code ILIKE 'RP%' OR d.device_code ILIKE 'PD%' THEN 'Portable'
-            WHEN dr.product_type ILIKE '%COUPLING%' OR d.device_code ILIKE 'CD%' THEN 'Coupling'
+            WHEN dr.product_type ILIKE '%RECEIVER%' OR d.device_code ILIKE 'RX%' OR dr.device_id ILIKE 'RX%' OR d.device_code ILIKE 'LD%' OR dr.device_id ILIKE 'LD%' THEN 'Loco Unit'
+            WHEN dr.product_type ILIKE '%TRANSMITTER%' OR d.device_code ILIKE 'TX%' OR dr.device_id ILIKE 'TX%' OR d.device_code ILIKE 'DE%' OR dr.device_id ILIKE 'DE%' THEN 'Dead-End'
+            WHEN dr.product_type ILIKE '%REPEATER%' OR d.device_code ILIKE 'RP%' OR dr.device_id ILIKE 'RP%' OR d.device_code ILIKE 'PD%' OR dr.device_id ILIKE 'PD%' THEN 'Portable'
+            WHEN dr.product_type ILIKE '%COUPLING%' OR d.device_code ILIKE 'CD%' OR dr.device_id ILIKE 'CD%' THEN 'Coupling'
             ELSE 'Loco Unit'
           END
         ) as device_type,
         COALESCE(
           dr.product_type,
           CASE 
-            WHEN d.device_code ILIKE 'TX%' OR d.device_code ILIKE 'DE%' THEN 'TRANSMITTER'
-            WHEN d.device_code ILIKE 'RX%' OR d.device_code ILIKE 'LD%' THEN 'RECEIVER'
-            WHEN d.device_code ILIKE 'RP%' OR d.device_code ILIKE 'PD%' THEN 'REPEATER'
+            WHEN d.device_code ILIKE 'TX%' OR dr.device_id ILIKE 'TX%' OR d.device_code ILIKE 'DE%' OR dr.device_id ILIKE 'DE%' THEN 'TRANSMITTER'
+            WHEN d.device_code ILIKE 'RX%' OR dr.device_id ILIKE 'RX%' OR d.device_code ILIKE 'LD%' OR dr.device_id ILIKE 'LD%' THEN 'RECEIVER'
+            WHEN d.device_code ILIKE 'RP%' OR dr.device_id ILIKE 'RP%' OR d.device_code ILIKE 'PD%' OR dr.device_id ILIKE 'PD%' THEN 'REPEATER'
             ELSE 'RECEIVER'
           END
         ) as product_type,
-        d.device_name,
-        d.serial_number,
+        COALESCE(d.device_name, dr.device_name) as device_name,
+        COALESCE(d.serial_number, dr.serial_number) as serial_number,
         COALESCE(d.yard_id, dr.yard_id, yl.yard_id) as yard_id,
         COALESCE(d.assigned_line_id, dr.assigned_line_id) as assigned_line_id,
-        d.firmware_version,
+        COALESCE(d.firmware_version, dr.firmware_version) as firmware_version,
         COALESCE(d.battery_level, (dt.latest_battery::text || '%'), '95%') as battery_level,
-        COALESCE(d.network_status, CASE WHEN dt.latest_rec >= (NOW() - INTERVAL '30 SECONDS') THEN 'Online' ELSE 'Offline' END) as network_status,
-        COALESCE(d.last_heartbeat, dt.latest_rec) as last_heartbeat,
-        d.condition_status,
+        COALESCE(dr.health_status, d.network_status, CASE WHEN dt.latest_rec >= (NOW() - INTERVAL '30 SECONDS') THEN 'Online' ELSE 'Offline' END) as network_status,
+        COALESCE(dr.last_reading_timestamp, d.last_heartbeat, dt.latest_rec) as last_heartbeat,
+        COALESCE(d.condition_status, 'GOOD') as condition_status,
         d.sim_status,
         yl.line_name,
         yl.line_number,
@@ -118,18 +118,18 @@ const getDevices = async (req, res) => {
         active_u.employee_id as active_holder_employee_id,
         active_da.issued_at as active_issued_at,
         active_da.condition_at_issue as active_condition
-      FROM devices d
-      LEFT JOIN device_registry dr ON d.device_code = dr.device_id OR d.id = dr.id
+      FROM device_registry dr
+      LEFT JOIN devices d ON d.device_code = dr.device_id OR d.id = dr.id
       LEFT JOIN (
         SELECT device_id, MAX(recorded_at) as latest_rec, (ARRAY_AGG(battery_level ORDER BY recorded_at DESC))[1] as latest_battery
         FROM device_telemetry
         GROUP BY device_id
-      ) dt ON d.device_code = dt.device_id
+      ) dt ON dr.device_id = dt.device_id OR d.device_code = dt.device_id
       LEFT JOIN yard_lines yl ON COALESCE(d.assigned_line_id, dr.assigned_line_id) = yl.id
       LEFT JOIN yards y ON COALESCE(d.yard_id, dr.yard_id, yl.yard_id) = y.id
       LEFT JOIN (
         SELECT * FROM device_assignments WHERE returned_at IS NULL
-      ) active_da ON d.id = active_da.device_id
+      ) active_da ON d.id = active_da.device_id OR dr.id = active_da.device_id
       LEFT JOIN users active_u ON active_da.employee_id = active_u.id
       WHERE 1=1
     `;
@@ -144,10 +144,10 @@ const getDevices = async (req, res) => {
     if (search && search.trim() !== '') {
       params.push(`%${search.trim()}%`);
       const pIdx = params.length;
-      query += ` AND (d.device_code ILIKE $${pIdx} OR d.device_name ILIKE $${pIdx} OR d.serial_number ILIKE $${pIdx})`;
+      query += ` AND (d.device_code ILIKE $${pIdx} OR dr.device_id ILIKE $${pIdx} OR d.device_name ILIKE $${pIdx} OR dr.device_name ILIKE $${pIdx})`;
     }
 
-    query += ' ORDER BY d.created_at DESC';
+    query += ' ORDER BY COALESCE(d.created_at, dr.updated_at) DESC';
 
     const result = await db.query(query, params);
     let rows = result.rows;

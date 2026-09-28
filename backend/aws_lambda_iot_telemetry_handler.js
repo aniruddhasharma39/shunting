@@ -10,7 +10,7 @@
  *   DB_HOST = safeshunt-db.c5oesqouwl70.ap-south-1.rds.amazonaws.com
  *   DB_NAME = safeshunt_db
  *   DB_USER = postgres
- *   DB_PASSWORD = pisolve123
+ *   DB_PASSWORD = ********
  *   DB_PORT = 5432
  */
 
@@ -94,7 +94,7 @@ exports.handler = async (event, context) => {
   const client = new Client({
     host: process.env.DB_HOST || 'safeshunt-db.c5oesqouwl70.ap-south-1.rds.amazonaws.com',
     user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'pisolve123',
+    password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME || 'safeshunt_db',
     port: parseInt(process.env.DB_PORT || '5432', 10),
     ssl: { rejectUnauthorized: false }
@@ -202,6 +202,25 @@ exports.handler = async (event, context) => {
         battery: battery,
         signal: signal
       });
+
+      const readings = event.readings || {};
+      const selectedTargetId = readings.selected_target_id ?? event.selected_target_id;
+
+      if (selectedTargetId === 0) {
+        await client.query(`
+          UPDATE shunting_sessions
+          SET 
+            session_end = NOW(),
+            end_time = NOW(),
+            session_status = 'COMPLETED',
+            status = 'COMPLETED',
+            manual_close_reason = 'Hardware un-paired (target=0)',
+            updated_at = NOW()
+          WHERE (rx_device_id = $1 OR ld_code = $1) AND (status = 'LIVE' OR session_status = 'LIVE')
+        `, [rxId]);
+        await client.end();
+        return { statusCode: 200, body: JSON.stringify({ success: true, message: 'Unpaired' }) };
+      }
 
       const updateRes = await client.query(`
         UPDATE shunting_sessions
