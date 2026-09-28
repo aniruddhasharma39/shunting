@@ -158,15 +158,14 @@ const getDashboardSummary = async (req, res) => {
 
       for (const row of activeRawTel.rows) {
         const devId = row.device_id;
-        if (seenLdDevices.has(devId)) continue;
-
-        const paired = awsIotBridge.derivePairedDevice(devId, {});
+        const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : (row.payload || {});
+        
+        const paired = awsIotBridge.derivePairedDevice(devId, payload);
         const rxId = devId.startsWith('RX') || devId.startsWith('LD') ? devId : paired;
         const txId = devId.startsWith('TX') || devId.startsWith('DE') ? devId : paired;
 
+        if (seenLdDevices.has(rxId)) continue;
         seenLdDevices.add(rxId);
-
-        const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : (row.payload || {});
         
         const readings = payload.readings || {};
         const selectedTargetId = readings.selected_target_id || payload.selected_target_id;
