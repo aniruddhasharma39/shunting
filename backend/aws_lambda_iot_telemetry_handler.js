@@ -10,7 +10,7 @@
  *   DB_HOST = safeshunt-db.c5oesqouwl70.ap-south-1.rds.amazonaws.com
  *   DB_NAME = safeshunt_db
  *   DB_USER = postgres
- *   DB_PASSWORD = pisolve123
+ *   DB_PASSWORD = ********
  *   DB_PORT = 5432
  */
 
@@ -94,7 +94,7 @@ exports.handler = async (event, context) => {
   const client = new Client({
     host: process.env.DB_HOST || 'safeshunt-db.c5oesqouwl70.ap-south-1.rds.amazonaws.com',
     user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'pisolve123',
+    password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME || 'safeshunt_db',
     port: parseInt(process.env.DB_PORT || '5432', 10),
     ssl: { rejectUnauthorized: false }

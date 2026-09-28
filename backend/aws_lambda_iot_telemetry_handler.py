@@ -10,7 +10,7 @@ Environment Variables in AWS Lambda:
   DB_HOST = safeshunt-db.c5oesqouwl70.ap-south-1.rds.amazonaws.com
   DB_NAME = safeshunt_db
   DB_USER = postgres
-  DB_PASSWORD = pisolve123
+  DB_PASSWORD = ********
   DB_PORT = 5432
 """
 
@@ -23,7 +23,7 @@ from psycopg2.extras import Json
 DB_HOST = os.environ.get("DB_HOST", "safeshunt-db.c5oesqouwl70.ap-south-1.rds.amazonaws.com")
 DB_NAME = os.environ.get("DB_NAME", "safeshunt_db")
 DB_USER = os.environ.get("DB_USER", "postgres")
-DB_PASSWORD = os.environ.get("DB_PASSWORD", "pisolve123")
+DB_PASSWORD = os.environ.get("DB_PASSWORD")
 DB_PORT = int(os.environ.get("DB_PORT", "5432"))
 
 def derive_paired_device(device_id, payload):

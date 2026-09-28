@@ -5,7 +5,7 @@ const pool = new Pool({
   user: process.env.DB_USER || 'postgres',
   host: process.env.DB_HOST || 'safeshunt-db.c5oesqouwl70.ap-south-1.rds.amazonaws.com',
   database: process.env.DB_NAME || 'safeshunt_db',
-  password: process.env.DB_PASSWORD || 'pisolve123',
+  password: process.env.DB_PASSWORD,
   port: parseInt(process.env.DB_PORT || '5432', 10),
   ssl: { rejectUnauthorized: false }
 });
