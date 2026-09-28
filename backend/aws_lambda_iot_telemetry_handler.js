@@ -171,8 +171,8 @@ exports.handler = async (event, context) => {
             end_time = NOW(),
             session_status = 'COMPLETED',
             status = 'COMPLETED',
-            final_distance_cm = $1,
-            final_placement_distance = $1 / 100.0,
+            final_distance_cm = $1::numeric,
+            final_placement_distance = $1::numeric / 100.0,
             updated_at = NOW()
           WHERE (rx_device_id = $2 OR ld_code = $2 OR tx_device_id = $3 OR de_code = $3) AND (status = 'LIVE' OR session_status = 'LIVE')
         `, [finalVal, rxId, txId]);
@@ -207,9 +207,9 @@ exports.handler = async (event, context) => {
         UPDATE shunting_sessions
         SET 
           distance_trajectory = COALESCE(distance_trajectory, '[]'::jsonb) || $1::jsonb,
-          final_distance_cm = $2,
-          final_placement_distance = $2 / 100.0,
-          minimum_distance = LEAST(COALESCE(minimum_distance, $2 / 100.0), $2 / 100.0),
+          final_distance_cm = $2::numeric,
+          final_placement_distance = $2::numeric / 100.0,
+          minimum_distance = LEAST(COALESCE(minimum_distance, $2::numeric / 100.0), $2::numeric / 100.0),
           updated_at = NOW()
         WHERE (tx_device_id = $3 OR de_code = $3 OR rx_device_id = $4 OR ld_code = $4)
           AND (status = 'LIVE' OR session_status = 'LIVE')
@@ -227,7 +227,7 @@ exports.handler = async (event, context) => {
               session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
               session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
               minimum_distance, distance_trajectory, created_at, updated_at
-            ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4, $4 / 100.0, $4 / 100.0, $5::jsonb, NOW(), NOW())
+            ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4::numeric, $4::numeric / 100.0, $4::numeric / 100.0, $5::jsonb, NOW(), NOW())
           `, [sessionCode, rxId, txId, distanceCm, JSON.stringify([JSON.parse(point)])]);
           console.log(`[Lambda] Auto-created live session: ${rxId} <--> ${txId}`);
         }
