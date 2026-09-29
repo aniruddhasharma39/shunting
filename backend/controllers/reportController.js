@@ -218,16 +218,16 @@ async function fetchSessionDataForReport(sessionId) {
   const ssQuery = `
     SELECT 
       ss.id,
-      COALESCE(ss.session_code, ss.session_number, ('SES-' || SUBSTRING(ss.id::text, 1, 8))) as session_code,
-      COALESCE(ss.ld_code, ss.rx_device_id) as ld_device,
-      COALESCE(ss.de_code, ss.tx_device_id) as de_device,
-      COALESCE(ss.start_time, ss.session_start, ss.created_at) as start_time,
-      COALESCE(ss.end_time, ss.session_end) as end_time,
-      ss.status,
+      COALESCE(ss.session_number, ('SES-' || SUBSTRING(ss.id::text, 1, 8))) as session_code,
+      COALESCE(ss.ld_code, ss.ld_device_id::text) as ld_device,
+      COALESCE(ss.de_code, ss.de_device_id::text) as de_device,
+      COALESCE(ss.session_start, ss.created_at) as start_time,
+      ss.session_end as end_time,
+      ss.session_status as status,
       ss.session_status,
-      ss.final_distance_cm,
+      ss.final_placement_distance as final_distance_cm,
       ss.minimum_distance,
-      ss.distance_trajectory,
+      NULL::jsonb as distance_trajectory,
       COALESCE(ss.employee_name, 'N/A') as holder_name,
       COALESCE(ss.employee_id_number, 'N/A') as holder_employee_id,
       COALESCE(yl.line_name, 'N/A') as line_name,
@@ -238,7 +238,7 @@ async function fetchSessionDataForReport(sessionId) {
     FROM shunting_sessions ss
     LEFT JOIN yard_lines yl ON ss.line_id = yl.id
     LEFT JOIN yards y ON ss.yard_id = y.id
-    WHERE ss.id::text = $1 OR ss.session_code = $1 OR ss.session_number = $1
+    WHERE ss.id::text = $1 OR ss.session_number = $1
     LIMIT 1
   `;
   const ssRes = await db.query(ssQuery, [sessionId]);
@@ -266,9 +266,9 @@ async function fetchSessionDataForReport(sessionId) {
     });
   } else if (session) {
     const telRes = await db.query(`
-      SELECT distance_cm, speed_kmh, battery_level, recorded_at
+      SELECT (payload->>'distance_cm')::numeric as distance_cm, (payload->>'speed_kmh')::numeric as speed_kmh, battery_level, recorded_at
       FROM device_telemetry
-      WHERE (device_id = $1 OR device_id = $2)
+      WHERE (device_id = $1::text OR device_id = $2::text)
         AND recorded_at >= ($3::timestamptz - INTERVAL '5 MINUTES')
         AND recorded_at <= ($4::timestamptz + INTERVAL '5 MINUTES')
       ORDER BY recorded_at ASC LIMIT 1000
@@ -394,29 +394,28 @@ exports.generateSessionPDF = async (req, res) => {
     // Top banner
     doc.rect(0, 0, doc.page.width, 90).fill(navyBlue);
 
-    // IR Logo from assets if available
-    const irLogoPath = path.join(__dirname, '../assets/ir_logo.png');
+    // IR Logo on the LEFT
+    const irLogoPath = path.join(__dirname, '../assets/ir_logo.jpg');
     if (fs.existsSync(irLogoPath)) {
-      try {
-        doc.image(irLogoPath, 30, 10, { width: 65, height: 65 });
-      } catch (_) {}
+      try { doc.image(irLogoPath, 14, 8, { width: 68, height: 68 }); } catch (_) {}
     }
 
-    // Ministry text on right
+    // Azadi Logo on the RIGHT
+    const azadiLogoPath = path.join(__dirname, '../assets/azadi_logo.png');
+    if (fs.existsSync(azadiLogoPath)) {
+      try { doc.image(azadiLogoPath, doc.page.width - 90, 8, { width: 72, height: 68 }); } catch (_) {}
+    }
+
+    // Center text block — English only (Helvetica cannot render Devanagari)
     doc.fillColor('white').fontSize(9).font('Helvetica')
-       .text('भारत सरकार | Government of India', 110, 14, { align: 'left' })
-       .text('रेल मंत्रालय | Ministry of Railways', 110, 26, { align: 'left' });
+       .text('Government of India', 0, 11, { align: 'center' })
+       .text('Ministry of Railways', 0, 23, { align: 'center' });
 
-    // Center title
     doc.fillColor('white').fontSize(18).font('Helvetica-Bold')
-       .text('भारतीय रेल | INDIAN RAILWAYS', 0, 16, { align: 'center' });
+       .text('INDIAN RAILWAYS', 0, 35, { align: 'center' });
 
-    doc.fillColor('#E8D5A3').fontSize(11).font('Helvetica')
-       .text('SafeShunt — Official Session Audit Report', 0, 38, { align: 'center' });
-
-    // Azadi ka Amrit Mahotsav text
-    doc.fillColor('#FFD700').fontSize(8.5).font('Helvetica')
-       .text('आज़ादी का अमृत महोत्सव | Azadi Ka Amrit Mahotsav — 75 Years of Independence', 0, 54, { align: 'center' });
+    doc.fillColor('#E8D5A3').fontSize(10).font('Helvetica')
+       .text('SafeShunt — Official Session Audit Report', 0, 57, { align: 'center' });
 
     // Tricolor stripe
     doc.rect(0, 72, doc.page.width, 5).fill(saffron);
@@ -666,21 +665,26 @@ exports.generateRangeReportPDF = async (req, res) => {
     // ---- HEADER BANNER ----
     doc.rect(0, 0, doc.page.width, 90).fill(navyBlue);
 
-    const irLogoPath = path.join(__dirname, '../assets/ir_logo.png');
+    const irLogoPath = path.join(__dirname, '../assets/ir_logo.jpg');
     if (fs.existsSync(irLogoPath)) {
-      try { doc.image(irLogoPath, 30, 10, { width: 65, height: 65 }); } catch (_) {}
+      try { doc.image(irLogoPath, 14, 8, { width: 68, height: 68 }); } catch (_) {}
     }
 
+    // Azadi Logo on the RIGHT
+    const azadiLogoPathBulk = path.join(__dirname, '../assets/azadi_logo.png');
+    if (fs.existsSync(azadiLogoPathBulk)) {
+      try { doc.image(azadiLogoPathBulk, doc.page.width - 90, 8, { width: 72, height: 68 }); } catch (_) {}
+    }
+
+    // Center text — English only (Helvetica cannot render Devanagari)
     doc.fillColor('white').fontSize(9).font('Helvetica')
-       .text('भारत सरकार | Government of India', 110, 14)
-       .text('रेल मंत्रालय | Ministry of Railways', 110, 26);
+       .text('Government of India', 0, 11, { align: 'center' })
+       .text('Ministry of Railways', 0, 23, { align: 'center' });
 
     doc.fillColor('white').fontSize(17).font('Helvetica-Bold')
-       .text('भारतीय रेल | INDIAN RAILWAYS', 0, 16, { align: 'center' });
+       .text('INDIAN RAILWAYS', 0, 35, { align: 'center' });
     doc.fillColor('#E8D5A3').fontSize(10.5).font('Helvetica')
-       .text('SafeShunt — Bulk Sessions Report', 0, 38, { align: 'center' });
-    doc.fillColor('#FFD700').fontSize(8).font('Helvetica')
-       .text('आज़ादी का अमृत महोत्सव | Azadi Ka Amrit Mahotsav — 75 Years of Independence', 0, 54, { align: 'center' });
+       .text('SafeShunt — Bulk Sessions Report', 0, 57, { align: 'center' });
 
     doc.rect(0, 72, doc.page.width, 5).fill(saffron);
     doc.rect(0, 77, doc.page.width, 5).fill('white');
