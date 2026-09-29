@@ -26,7 +26,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final session = UserSession();
-      final request = http.MultipartRequest('POST', Uri.parse('https://shunting-lemon.vercel.app/api/auth/profile/picture'));
+      final request = http.MultipartRequest('POST', Uri.parse('https://shunting-backend.onrender.com/api/auth/profile/picture'));
       request.headers['Authorization'] = 'Bearer ${session.token}';
       
       final bytes = await image.readAsBytes();
@@ -64,7 +64,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final session = UserSession();
       final response = await http.delete(
-        Uri.parse('https://shunting-lemon.vercel.app/api/auth/profile/picture'),
+        Uri.parse('https://shunting-backend.onrender.com/api/auth/profile/picture'),
         headers: {
           'Authorization': 'Bearer ${session.token}',
         },
@@ -133,7 +133,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                       image: session.profilePicUrl != null
                           ? DecorationImage(
-                              image: NetworkImage('https://shunting-lemon.vercel.app${session.profilePicUrl}'),
+                              image: NetworkImage('https://shunting-backend.onrender.com${session.profilePicUrl}'),
                               fit: BoxFit.cover,
                             )
                           : null,
