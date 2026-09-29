@@ -1,6 +1,8 @@
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit-table');
 const db = require('../config/db');
+const path = require('path');
+const fs = require('fs');
 
 async function getReportData(reportType, filters, user) {
   let tableData = { headers: [], rows: [] };
@@ -217,8 +219,8 @@ async function fetchSessionDataForReport(sessionId) {
     SELECT 
       ss.id,
       COALESCE(ss.session_code, ss.session_number, ('SES-' || SUBSTRING(ss.id::text, 1, 8))) as session_code,
-      COALESCE(ss.ld_code, ss.rx_device_id, 'N/A') as ld_device,
-      COALESCE(ss.de_code, ss.tx_device_id, 'N/A') as de_device,
+      COALESCE(ss.ld_code, ss.rx_device_id) as ld_device,
+      COALESCE(ss.de_code, ss.tx_device_id) as de_device,
       COALESCE(ss.start_time, ss.session_start, ss.created_at) as start_time,
       COALESCE(ss.end_time, ss.session_end) as end_time,
       ss.status,
@@ -270,7 +272,7 @@ async function fetchSessionDataForReport(sessionId) {
         AND recorded_at >= ($3::timestamptz - INTERVAL '5 MINUTES')
         AND recorded_at <= ($4::timestamptz + INTERVAL '5 MINUTES')
       ORDER BY recorded_at ASC LIMIT 1000
-    `, [session.ld_device, session.de_device, session.start_time, session.end_time || new Date()]);
+    `, [session.ld_device, session.de_device || session.ld_device, session.start_time, session.end_time || new Date()]);
     telRes.rows.forEach(row => {
       if (row.distance_cm != null) {
         points.push({ time: new Date(row.recorded_at), distCm: row.distance_cm, speed: row.speed_kmh ?? 0.0, batt: row.battery_level });
@@ -354,7 +356,7 @@ async function fetchSessionDataForReport(sessionId) {
     ]);
   });
 
-  const avgBattery = battCount > 0 ? Math.round(totalBatt / battCount) : 95;
+  const avgBattery = battCount > 0 ? Math.round(totalBatt / battCount) : null;
   const initialDistance = points.length > 0 ? (points[0].distCm / 100).toFixed(2) : '--';
   const finalDistance = points.length > 0 ? (points[points.length - 1].distCm / 100).toFixed(2) : '--';
 
@@ -370,7 +372,7 @@ exports.generateSessionPDF = async (req, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'portrait' });
+    const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'portrait' });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="Session_Report_${session.session_code}.pdf"`);
     
@@ -382,66 +384,143 @@ exports.generateSessionPDF = async (req, res) => {
 
     doc.pipe(res);
 
-    // Title & Header (Professional Formal Style for Indian Railways)
-    doc.fontSize(22).font('Helvetica-Bold').text('INDIAN RAILWAYS', { align: 'center' });
-    doc.fontSize(16).font('Helvetica-Bold').text('SafeShunt - Official Session Audit Report', { align: 'center' });
-    doc.moveDown(0.5);
-    doc.fontSize(10).font('Helvetica').text(`Generated On: ${new Date().toLocaleString()}`, { align: 'center' });
-    doc.moveDown(1.5);
+    // -----------------------------------------------------------------------
+    // HEADER: Indian Railways Official Branding
+    // -----------------------------------------------------------------------
+    const navyBlue = '#003580';
+    const saffron = '#FF6600';
+    const deepGreen = '#046A38';
 
-    // Metadata Summary Section
-    doc.fontSize(12).font('Helvetica-Bold').text('SESSION METADATA & PARAMETERS:');
-    doc.moveDown(0.5);
-    doc.fontSize(10).font('Helvetica');
+    // Top banner
+    doc.rect(0, 0, doc.page.width, 90).fill(navyBlue);
 
-    const metaLeft = [
-      `Session Code: ${session.session_code}`,
-      `Receiver (Loco Unit): ${session.ld_device}`,
-      `Transmitter (Dead-End): ${session.de_device}`,
-      `Loco Pilot / Holder: ${session.holder_name === 'N/A' ? 'Not Assigned' : session.holder_name} (${session.holder_employee_id})`,
-      `Yard / Location: ${session.yard_name === 'N/A' ? 'Not Assigned' : session.yard_name} (${session.yard_code})`
-    ];
-
-    const metaRight = [
-      `Track / Pit Line: ${session.line_name === 'N/A' ? 'Not Assigned' : session.line_name} (Line ${session.line_number})`,
-      `Session Start: ${session.start_time ? new Date(session.start_time).toLocaleString() : '--'}`,
-      `Session End: ${session.end_time ? new Date(session.end_time).toLocaleString() : 'LIVE'}`,
-      `Initial Shunting Distance: ${initialDistance} m`,
-      `Final Reached Distance: ${finalDistance} m`
-    ];
-
-    metaLeft.forEach((line, i) => {
-      doc.text(`${line.padEnd(50)}   |   ${metaRight[i] || ''}`);
-    });
-    
-    doc.moveDown(0.5);
-    doc.text(`Average Device Battery (Session Lifetime): ${avgBattery}%`);
-
-    if (session.manual_close_reason) {
-      doc.moveDown(0.5);
-      doc.text(`Close Remarks / Note: ${session.manual_close_reason}`);
+    // IR Logo from assets if available
+    const irLogoPath = path.join(__dirname, '../assets/ir_logo.png');
+    if (fs.existsSync(irLogoPath)) {
+      try {
+        doc.image(irLogoPath, 30, 10, { width: 65, height: 65 });
+      } catch (_) {}
     }
 
-    doc.moveDown(1.5);
-    doc.fontSize(12).font('Helvetica-Bold').text('TABULAR TELEMETRY STREAM LOGS:');
-    doc.moveDown(0.5);
+    // Ministry text on right
+    doc.fillColor('white').fontSize(9).font('Helvetica')
+       .text('भारत सरकार | Government of India', 110, 14, { align: 'left' })
+       .text('रेल मंत्रालय | Ministry of Railways', 110, 26, { align: 'left' });
+
+    // Center title
+    doc.fillColor('white').fontSize(18).font('Helvetica-Bold')
+       .text('भारतीय रेल | INDIAN RAILWAYS', 0, 16, { align: 'center' });
+
+    doc.fillColor('#E8D5A3').fontSize(11).font('Helvetica')
+       .text('SafeShunt — Official Session Audit Report', 0, 38, { align: 'center' });
+
+    // Azadi ka Amrit Mahotsav text
+    doc.fillColor('#FFD700').fontSize(8.5).font('Helvetica')
+       .text('आज़ादी का अमृत महोत्सव | Azadi Ka Amrit Mahotsav — 75 Years of Independence', 0, 54, { align: 'center' });
+
+    // Tricolor stripe
+    doc.rect(0, 72, doc.page.width, 5).fill(saffron);
+    doc.rect(0, 77, doc.page.width, 5).fill('white');
+    doc.rect(0, 82, doc.page.width, 5).fill(deepGreen);
+
+    doc.y = 105;
+
+    // -----------------------------------------------------------------------
+    // METADATA BOX
+    // -----------------------------------------------------------------------
+    doc.fillColor(navyBlue).fontSize(11).font('Helvetica-Bold')
+       .text('SESSION METADATA & PARAMETERS', 40, doc.y);
+    doc.moveDown(0.4);
+
+    const metaY = doc.y;
+    doc.rect(40, metaY, doc.page.width - 80, 135).strokeColor('#CCCCCC').lineWidth(1).stroke();
+
+    const col1X = 55;
+    const col2X = doc.page.width / 2 + 10;
+    let rowY = metaY + 10;
+    const rowH = 18;
+
+    function metaRow(label, value, x, y, highlight = false) {
+      doc.fillColor('#555555').fontSize(8).font('Helvetica').text(label + ':', x, y, { width: 120 });
+      doc.fillColor(highlight ? saffron : '#111111').fontSize(9).font('Helvetica-Bold').text(value || 'N/A', x + 122, y, { width: 140 });
+    }
+
+    metaRow('Session Code', session.session_code, col1X, rowY);
+    metaRow('Generated On', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }), col2X, rowY);
+    rowY += rowH;
+    metaRow('Receiver (Loco Unit)', session.ld_device, col1X, rowY);
+    metaRow('Transmitter (Dead-End)', session.de_device || 'N/A', col2X, rowY);
+    rowY += rowH;
+    metaRow('Assigned Yard', session.yard_name === 'N/A' ? 'Not Assigned' : session.yard_name, col1X, rowY);
+    metaRow('Track / Pit Line', session.line_name === 'N/A' ? 'Not Assigned' : session.line_name, col2X, rowY);
+    rowY += rowH;
+    metaRow('Loco Pilot / Holder', session.holder_name === 'N/A' ? 'Not Assigned' : `${session.holder_name} (${session.holder_employee_id})`, col1X, rowY);
+    metaRow('Avg Device Battery', avgBattery !== null ? `${avgBattery}%` : 'N/A', col2X, rowY);
+    rowY += rowH;
+    metaRow('Session Start (IST)', session.start_time ? new Date(session.start_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '--', col1X, rowY);
+    metaRow('Session End (IST)', session.end_time ? new Date(session.end_time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'LIVE', col2X, rowY);
+    rowY += rowH;
+    metaRow('Initial Distance', `${initialDistance} m`, col1X, rowY, true);
+    metaRow('Final Distance', `${finalDistance} m`, col2X, rowY, true);
+    rowY += rowH;
+
+    if (session.manual_close_reason) {
+      metaRow('Close Remarks', session.manual_close_reason, col1X, rowY);
+    }
+
+    doc.y = metaY + 145;
+    doc.moveDown(0.8);
+
+    // -----------------------------------------------------------------------
+    // TELEMETRY TABLE
+    // -----------------------------------------------------------------------
+    doc.fillColor(navyBlue).fontSize(11).font('Helvetica-Bold')
+       .text('TABULAR TELEMETRY STREAM LOGS', 40, doc.y);
+    doc.moveDown(0.4);
+
+    const tableRows = logs.length > 0 ? logs : [['1', '--:--', '-- m', '0.0 km/h', 'No data < 45m']];
+
+    // Guard: ensure all cell values are finite strings (prevent NaN crash)
+    const safeRows = tableRows.map(row =>
+      row.map(cell => {
+        const s = String(cell ?? '--');
+        // Check for NaN in any numeric-looking value
+        return s === 'NaN' || s === 'undefined' ? '--' : s;
+      })
+    );
 
     const tableData = {
       headers: ['#', 'Time Range (IST)', 'Distance', 'Speed', 'Distance Zone (Polling)'],
-      rows: logs.length > 0 ? logs : [['1', '--:--', '-- m', '0.0 km/h', 'No data < 45m']]
+      rows: safeRows
     };
 
     await doc.table(tableData, {
-      prepareHeader: () => doc.font("Helvetica-Bold").fontSize(10),
+      prepareHeader: () => doc.font("Helvetica-Bold").fontSize(9),
       prepareRow: (row, indexColumn, indexRow, rectRow, rectCell) => {
-        // Apply slight background tinting dynamically based on Zone
-        const zone = row[4] || '';
-        if (indexColumn === 0 && zone !== 'Distance Zone (Polling)') {
-            doc.addBackground(rectRow, (zone.includes('<15m') ? '#ffebee' : (zone.includes('15-30m') ? '#fff3e0' : (zone.includes('30-45m') ? '#fffde7' : '#ffffff'))), doc);
+        doc.font("Helvetica").fontSize(8);
+        // Only add background if rectRow is valid
+        if (rectRow && typeof rectRow.x === 'number' && isFinite(rectRow.x) &&
+            typeof rectRow.y === 'number' && isFinite(rectRow.y) &&
+            typeof rectRow.width === 'number' && isFinite(rectRow.width) &&
+            typeof rectRow.height === 'number' && isFinite(rectRow.height)) {
+          if (indexColumn === 0) {
+            const zone = (row && row[4]) ? row[4] : '';
+            const bgColor = zone.includes('<15m') ? '#FFF3F3'
+              : zone.includes('15-30m') ? '#FFF8E8'
+              : zone.includes('30-45m') ? '#FFFFF0'
+              : '#FFFFFF';
+            doc.addBackground(rectRow, bgColor, 0.6);
+          }
         }
-        doc.font("Helvetica").fontSize(9);
       }
     });
+
+    // Footer
+    doc.moveDown(1.5);
+    doc.rect(40, doc.y, doc.page.width - 80, 0.5).fill('#CCCCCC');
+    doc.moveDown(0.5);
+    doc.fillColor('#888888').fontSize(8).font('Helvetica')
+       .text(`This is a computer-generated report by SafeShunt — Indian Railways Shunting Safety System. Generated: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`, 40, doc.y, { align: 'center' });
 
     doc.end();
     await streamPromise;
@@ -474,7 +553,7 @@ exports.generateSessionExcel = async (req, res) => {
     sheet.addRow([]);
 
     sheet.addRow(['Session Metadata:']);
-    sheet.addRow(['Receiver (Loco Unit)', session.ld_device, 'Transmitter (Dead-End)', session.de_device]);
+    sheet.addRow(['Receiver (Loco Unit)', session.ld_device, 'Transmitter (Dead-End)', session.de_device || 'N/A']);
     sheet.addRow(['Loco Pilot (Holder)', `${session.holder_name} (${session.holder_employee_id})`, 'Yard / Location', `${session.yard_name} (${session.yard_code})`]);
     sheet.addRow(['Track / Pit Line', `${session.line_name} (Line ${session.line_number})`, 'Session Status', session.status || session.session_status]);
     sheet.addRow(['Session Start', session.start_time ? new Date(session.start_time).toLocaleString() : '--', 'Session End', session.end_time ? new Date(session.end_time).toLocaleString() : 'LIVE']);
@@ -485,7 +564,7 @@ exports.generateSessionExcel = async (req, res) => {
     sheet.addRow([]);
 
     sheet.addRow(['Tabular Telemetry Logs:']);
-    const headers = ['#', 'Time (IST)', 'Distance', 'Approach Speed', 'Battery', 'Signal RSSI', 'Safety Status'];
+    const headers = ['#', 'Time (IST)', 'Distance', 'Approach Speed', 'Distance Zone'];
     const headerRow = sheet.addRow(headers);
     headerRow.fill = {
       type: 'pattern',
@@ -497,7 +576,7 @@ exports.generateSessionExcel = async (req, res) => {
     if (logs.length > 0) {
       logs.forEach(r => sheet.addRow(r));
     } else {
-      sheet.addRow(['1', '--:--', '-- m', '0.0 km/h', '95%', '-65 dBm', 'NORMAL']);
+      sheet.addRow(['1', '--:--', '-- m', '0.0 km/h', 'No data < 45m']);
     }
 
     sheet.columns.forEach(column => {
@@ -517,3 +596,221 @@ exports.generateSessionExcel = async (req, res) => {
   }
 };
 
+// =========================================================================
+// RANGE-BASED BULK SESSION REPORT (PDF)
+// =========================================================================
+
+exports.generateRangeReportPDF = async (req, res) => {
+  try {
+    const { from_date, to_date } = req.query;
+
+    if (!from_date || !to_date) {
+      return res.status(400).json({ error: 'from_date and to_date are required' });
+    }
+
+    // Fetch sessions in range - only real devices
+    const knownDevicesRes = await db.query(`
+      SELECT device_id FROM device_registry
+      WHERE (is_disabled IS NULL OR is_disabled = FALSE)
+    `);
+    const knownDeviceIds = new Set(knownDevicesRes.rows.map(r => r.device_id));
+
+    const sessionsQuery = `
+      SELECT 
+        ss.id,
+        COALESCE(ss.session_code, ss.session_number, ('SES-' || SUBSTRING(ss.id::text, 1, 8))) as session_code,
+        COALESCE(ss.ld_code, ss.rx_device_id) as ld_device,
+        COALESCE(ss.de_code, ss.tx_device_id) as de_device,
+        COALESCE(ss.start_time, ss.session_start, ss.created_at) as start_time,
+        COALESCE(ss.end_time, ss.session_end) as end_time,
+        ss.final_distance_cm,
+        ss.minimum_distance,
+        ss.employee_name as holder_name,
+        ss.employee_id_number as holder_employee_id,
+        yl.line_name,
+        y.yard_name
+      FROM shunting_sessions ss
+      LEFT JOIN yard_lines yl ON ss.line_id = yl.id
+      LEFT JOIN yards y ON ss.yard_id = y.id
+      WHERE COALESCE(ss.start_time, ss.session_start, ss.created_at) >= $1::timestamptz
+        AND COALESCE(ss.start_time, ss.session_start, ss.created_at) <= $2::timestamptz + INTERVAL '1 day' - INTERVAL '1 second'
+      ORDER BY COALESCE(ss.start_time, ss.session_start, ss.created_at) ASC
+      LIMIT 500
+    `;
+    const ssRes = await db.query(sessionsQuery, [from_date, to_date]);
+
+    const sessions = ssRes.rows.filter(s => {
+      if (!s.ld_device) return false;
+      if (knownDeviceIds.size > 0 && !knownDeviceIds.has(s.ld_device)) return false;
+      return true;
+    });
+
+    // Create PDF
+    const doc = new PDFDocument({ margin: 35, size: 'A4', layout: 'portrait' });
+    res.setHeader('Content-Type', 'application/pdf');
+    const safeFrom = from_date.replace(/[^0-9\-]/g, '');
+    const safeTo = to_date.replace(/[^0-9\-]/g, '');
+    res.setHeader('Content-Disposition', `attachment; filename="SafeShunt_Sessions_${safeFrom}_to_${safeTo}.pdf"`);
+
+    const streamPromise = new Promise((resolve, reject) => {
+      res.on('finish', resolve);
+      res.on('error', reject);
+      doc.on('error', reject);
+    });
+    doc.pipe(res);
+
+    const navyBlue = '#003580';
+    const saffron = '#FF6600';
+    const deepGreen = '#046A38';
+
+    // ---- HEADER BANNER ----
+    doc.rect(0, 0, doc.page.width, 90).fill(navyBlue);
+
+    const irLogoPath = path.join(__dirname, '../assets/ir_logo.png');
+    if (fs.existsSync(irLogoPath)) {
+      try { doc.image(irLogoPath, 30, 10, { width: 65, height: 65 }); } catch (_) {}
+    }
+
+    doc.fillColor('white').fontSize(9).font('Helvetica')
+       .text('भारत सरकार | Government of India', 110, 14)
+       .text('रेल मंत्रालय | Ministry of Railways', 110, 26);
+
+    doc.fillColor('white').fontSize(17).font('Helvetica-Bold')
+       .text('भारतीय रेल | INDIAN RAILWAYS', 0, 16, { align: 'center' });
+    doc.fillColor('#E8D5A3').fontSize(10.5).font('Helvetica')
+       .text('SafeShunt — Bulk Sessions Report', 0, 38, { align: 'center' });
+    doc.fillColor('#FFD700').fontSize(8).font('Helvetica')
+       .text('आज़ादी का अमृत महोत्सव | Azadi Ka Amrit Mahotsav — 75 Years of Independence', 0, 54, { align: 'center' });
+
+    doc.rect(0, 72, doc.page.width, 5).fill(saffron);
+    doc.rect(0, 77, doc.page.width, 5).fill('white');
+    doc.rect(0, 82, doc.page.width, 5).fill(deepGreen);
+
+    doc.y = 100;
+
+    // ---- REPORT METADATA ----
+    const fromLabel = new Date(from_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+    const toLabel = new Date(to_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    doc.rect(35, doc.y, doc.page.width - 70, 52).strokeColor('#CCCCCC').lineWidth(1).stroke();
+    const mY = doc.y + 8;
+    doc.fillColor('#333333').fontSize(9).font('Helvetica')
+       .text(`Date Range: ${fromLabel}  —  ${toLabel}`, 50, mY)
+       .text(`Total Sessions: ${sessions.length}`, 50, mY + 14)
+       .text(`Generated At: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`, 50, mY + 28);
+    doc.y = doc.y + 60;
+
+    // ---- SESSION CARDS (table per session) ----
+    if (sessions.length === 0) {
+      doc.fillColor('#888888').fontSize(12).font('Helvetica')
+         .text('No sessions found for the selected date range.', { align: 'center' });
+    }
+
+    for (let i = 0; i < sessions.length; i++) {
+      const s = sessions[i];
+
+      // Page break check
+      if (doc.y > doc.page.height - 160) {
+        doc.addPage();
+        doc.y = 40;
+      }
+
+      // Duration
+      let durationStr = '--';
+      if (s.start_time && s.end_time) {
+        const diffMs = Math.abs(new Date(s.end_time) - new Date(s.start_time));
+        const mins = Math.floor(diffMs / 60000);
+        const secs = Math.floor((diffMs % 60000) / 1000);
+        durationStr = `${mins}m ${secs}s`;
+      }
+
+      const startDistStr = s.minimum_distance != null ? `${Number(s.minimum_distance).toFixed(2)} m` : '--';
+      const endDistStr = s.final_distance_cm != null ? `${(s.final_distance_cm / 100).toFixed(2)} m` : '--';
+
+      const cardY = doc.y;
+      const cardHeight = 108;
+      const cardWidth = doc.page.width - 70;
+
+      // Card background
+      doc.roundedRect(35, cardY, cardWidth, cardHeight, 8)
+         .fillAndStroke('#F8FAFF', '#D0D8E8');
+
+      // Card header bar
+      doc.roundedRect(35, cardY, cardWidth, 22, [8, 8, 0, 0])
+         .fill(navyBlue);
+
+      doc.fillColor('white').fontSize(8.5).font('Helvetica-Bold')
+         .text(s.session_code, 50, cardY + 6)
+         .text(s.start_time ? new Date(s.start_time).toLocaleDateString('en-IN') : '--', 0, cardY + 6, { align: 'right', width: doc.page.width - 70 - 20 });
+
+      // Card body
+      const bY = cardY + 28;
+      const col = (cardWidth - 20) / 3;
+
+      // Col 1: Devices
+      doc.fillColor('#555555').fontSize(7.5).font('Helvetica')
+         .text('Receiver (Loco)', 50, bY)
+         .text('Transmitter (DE)', 50, bY + 14)
+         .text('Duration', 50, bY + 28)
+         .text('Shunting Start', 50, bY + 42);
+
+      doc.fillColor('#111111').fontSize(8).font('Helvetica-Bold')
+         .text(s.ld_device || '--', 155, bY, { width: col - 10 })
+         .text(s.de_device || 'N/A', 155, bY + 14, { width: col - 10 })
+         .text(durationStr, 155, bY + 28, { width: col - 10 })
+         .text(s.start_time ? new Date(s.start_time).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true }) : '--', 155, bY + 42, { width: col - 10 });
+
+      // Col 2: Distances
+      const c2X = 35 + 10 + col;
+      doc.fillColor('#555555').fontSize(7.5).font('Helvetica')
+         .text('Start Distance', c2X, bY)
+         .text('End Distance', c2X, bY + 14)
+         .text('Yard', c2X, bY + 28)
+         .text('Track / Pit Line', c2X, bY + 42);
+
+      doc.fillColor('#111111').fontSize(8).font('Helvetica-Bold')
+         .text(startDistStr, c2X + 80, bY, { width: col - 10 })
+         .text(endDistStr, c2X + 80, bY + 14, { width: col - 10 })
+         .text(s.yard_name || 'Not Assigned', c2X + 80, bY + 28, { width: col - 10 })
+         .text(s.line_name || 'Not Assigned', c2X + 80, bY + 42, { width: col - 10 });
+
+      // Col 3: Person
+      const c3X = 35 + 10 + col * 2;
+      doc.fillColor('#555555').fontSize(7.5).font('Helvetica')
+         .text('Issued To', c3X, bY)
+         .text('Employee ID', c3X, bY + 14)
+         .text('Shunting End', c3X, bY + 28);
+
+      doc.fillColor('#111111').fontSize(8).font('Helvetica-Bold')
+         .text(s.holder_name || 'N/A', c3X + 65, bY, { width: col - 5 })
+         .text(s.holder_employee_id || 'N/A', c3X + 65, bY + 14, { width: col - 5 })
+         .text(s.end_time ? new Date(s.end_time).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true }) : '--', c3X + 65, bY + 28, { width: col - 5 });
+
+      // Separator line
+      doc.rect(35, cardY + 78, cardWidth, 0.5).fill('#D0D8E8');
+
+      // Card footer
+      const footY = cardY + 84;
+      const ldStatus = s.ld_device ? 'Real Device' : 'Unknown';
+      doc.fillColor('#888888').fontSize(7).font('Helvetica')
+         .text(`Session ID: ${s.id}  |  Device Pair: ${s.ld_device || '--'} ↔ ${s.de_device || 'N/A'}  |  ${ldStatus}`, 50, footY, { align: 'left' });
+
+      doc.y = cardY + cardHeight + 10;
+    }
+
+    // ---- REPORT FOOTER ----
+    doc.moveDown(1);
+    doc.rect(35, doc.y, doc.page.width - 70, 0.5).fill('#CCCCCC');
+    doc.moveDown(0.4);
+    doc.fillColor('#AAAAAA').fontSize(7.5).font('Helvetica')
+       .text(`SafeShunt — Indian Railways Shunting Safety System | Computer Generated Report | ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`, 0, doc.y, { align: 'center' });
+
+    doc.end();
+    await streamPromise;
+  } catch (error) {
+    console.error('Range Report PDF Error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to generate range report PDF' });
+    }
+  }
+};

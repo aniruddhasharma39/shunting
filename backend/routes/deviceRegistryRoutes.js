@@ -7,7 +7,8 @@ const {
   ingestDeviceTelemetry,
   upsertRegistryDevice,
   deleteRegistryDevice,
-  uploadDeviceImagesOnly
+  uploadDeviceImagesOnly,
+  toggleRegistryDeviceDisabled
 } = require('../controllers/deviceRegistryController');
 const { verifyToken, requireRole } = require('../middleware/authMiddleware');
 const multer = require('multer');
@@ -34,5 +35,7 @@ router.route('/:deviceId')
 
 router.route('/:deviceId/images')
   .post(verifyToken, requireRole('super_admin', 'hardware_engineer', 'yard_admin'), upload.fields([{ name: 'device_image', maxCount: 1 }, { name: 'device_sim', maxCount: 1 }]), uploadDeviceImagesOnly);
+
+router.put('/:deviceId/toggle-disabled', verifyToken, requireRole('super_admin', 'hardware_engineer', 'yard_admin'), toggleRegistryDeviceDisabled);
 
 module.exports = router;

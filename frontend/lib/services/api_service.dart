@@ -407,6 +407,11 @@ class ApiService {
     return '$baseUrl/reports/session/$sessionId/excel';
   }
 
+  static String getRangeReportPdfUrl(String fromDate, String toDate) {
+    final token = UserSession().token ?? '';
+    return '$baseUrl/reports/range/pdf?from_date=$fromDate&to_date=$toDate&token=$token';
+  }
+
   static Future<Map<String, dynamic>> fetchTelemetryAudit(String deviceId) async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/iot/telemetry/$deviceId'), headers: _authHeaders());
@@ -639,6 +644,23 @@ class ApiService {
         return {'success': true, 'data': data['data']};
       }
       return {'success': false, 'message': data['message'] ?? 'Failed to ingest telemetry'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error.'};
+    }
+  }
+
+  /// Toggle device disabled/enabled status in device registry
+  static Future<Map<String, dynamic>> toggleDeviceDisabled(String deviceId) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/device-registry/$deviceId/toggle-disabled'),
+        headers: _authHeaders(),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': data};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Failed to toggle device state'};
     } catch (e) {
       return {'success': false, 'message': 'Network error.'};
     }

@@ -348,3 +348,18 @@ CREATE TABLE IF NOT EXISTS telemetry_data (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_telemetry_device_time ON telemetry_data(device_id, recorded_at DESC);
+
+-- ============================================================
+-- MIGRATIONS (Idempotent — Safe to re-run)
+-- ============================================================
+
+-- Add is_disabled flag to device_registry (for enable/disable toggle)
+ALTER TABLE device_registry ADD COLUMN IF NOT EXISTS is_disabled BOOLEAN DEFAULT FALSE;
+
+-- Add assigned_line_id to device_registry for line assignment sync
+ALTER TABLE device_registry ADD COLUMN IF NOT EXISTS assigned_line_id UUID REFERENCES yard_lines(id) ON DELETE SET NULL;
+
+-- Add computed status indices for performance
+CREATE INDEX IF NOT EXISTS idx_device_registry_disabled ON device_registry(is_disabled);
+CREATE INDEX IF NOT EXISTS idx_device_registry_yard ON device_registry(yard_id);
+CREATE INDEX IF NOT EXISTS idx_device_telemetry_recorded_at ON device_telemetry(device_id, recorded_at DESC);

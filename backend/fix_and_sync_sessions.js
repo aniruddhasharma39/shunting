@@ -49,7 +49,7 @@ async function fixAndSync() {
   for (const reg of regDevices.rows) {
     const devCode = reg.device_id;
     const devType = (reg.product_type?.toUpperCase().includes('TRANSMITTER') || devCode.startsWith('TX')) ? 'Dead-End' : 'Loco Unit';
-    const yardId = reg.yard_id || defaultYardId;
+    const yardId = reg.yard_id || null;
 
     await pool.query(`
       INSERT INTO devices (
@@ -163,7 +163,7 @@ async function fixAndSync() {
         // Look up device UUIDs if available
         const rxDev = await pool.query('SELECT id, yard_id FROM devices WHERE device_code = $1 LIMIT 1', [rxId]);
         const txDev = await pool.query('SELECT id, yard_id FROM devices WHERE device_code = $1 LIMIT 1', [txId]);
-        const yardId = rxDev.rows[0]?.yard_id || txDev.rows[0]?.yard_id || defaultYardId;
+        const yardId = rxDev.rows[0]?.yard_id || txDev.rows[0]?.yard_id || null;
 
         await pool.query(`
           INSERT INTO shunting_sessions (
@@ -180,7 +180,7 @@ async function fixAndSync() {
             $6, $6, $7,
             $8::timestamp, $8::timestamp, $9::timestamp, $9::timestamp,
             $10, $10, $11, $12,
-            $13, $14::jsonb, 'ian', 'EMP-001',
+            $13, $14::jsonb, 'N/A', 'N/A',
             $8::timestamp, $9::timestamp
           )
         `, [

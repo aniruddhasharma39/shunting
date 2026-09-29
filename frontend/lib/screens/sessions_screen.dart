@@ -403,9 +403,9 @@ class _SessionsScreenState extends State<SessionsScreen> {
                                 deviceId: session['deDevice'] ?? 'TX-01',
                                 icon: Icons.sensors,
                                 iconColor: Colors.amberAccent,
-                                battery: session['txBattery'] ?? '92%',
-                                signal: session['txSignal'] ?? '-68 dBm',
-                                subtitle: '${session['yard'] ?? 'Yard'} • ${session['line'] ?? 'Line'}',
+                                battery: session['txBattery'] ?? '--',
+                                signal: session['txSignal'] ?? '--',
+                                subtitle: session['yard'] != null ? '${session['yard']} • ${session['line'] ?? 'N/A'}' : 'No yard assigned',
                               ),
                             ),
                           ],
@@ -572,31 +572,266 @@ class _SessionsScreenState extends State<SessionsScreen> {
   // 2. SESSION HISTORY TAB
   // ==========================================
   Widget _buildHistoryTab() {
-    if (_historySessions.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
-          SizedBox(height: 100),
-          Center(
-            child: Text(
-              'No past shunting sessions recorded yet.',
-              style: TextStyle(color: Colors.white38),
+    return Column(
+      children: [
+        // Date Range Report Banner
+        Container(
+          margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF1E3A5F), Color(0xFF0F2340)],
             ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.4)),
           ),
-        ],
+          child: Row(
+            children: [
+              const Icon(Icons.picture_as_pdf, color: Color(0xFF60A5FA), size: 20),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Duration-Wise Bulk Report', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                    Text('Download Indian Railways PDF for a date range', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _showRangeReportDialog,
+                icon: const Icon(Icons.download, size: 14, color: Colors.white),
+                label: const Text('Download', style: TextStyle(fontSize: 11, color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: 0,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Session List
+        Expanded(
+          child: _historySessions.isEmpty
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 100),
+                  Center(
+                    child: Text(
+                      'No past shunting sessions recorded yet.',
+                      style: TextStyle(color: Colors.white38),
+                    ),
+                  ),
+                ],
+              )
+            : _buildHistoryList(),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showRangeReportDialog() async {
+    DateTime? fromDate;
+    DateTime? toDate;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDlgState) {
+            String fromLabel = fromDate != null
+              ? '${fromDate!.day.toString().padLeft(2,'0')}/${fromDate!.month.toString().padLeft(2,'0')}/${fromDate!.year}'
+              : 'Pick start date';
+            String toLabel = toDate != null
+              ? '${toDate!.day.toString().padLeft(2,'0')}/${toDate!.month.toString().padLeft(2,'0')}/${toDate!.year}'
+              : 'Pick end date';
+
+            return Dialog(
+              backgroundColor: const Color(0xFF0F172A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: const BorderSide(color: Colors.blueAccent),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(22),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.picture_as_pdf, color: Colors.redAccent, size: 22),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Indian Railways — Range Report',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Generate a comprehensive PDF with Indian Railways branding for all sessions in a date range.',
+                      style: TextStyle(color: Colors.white60, fontSize: 11, height: 1.5),
+                    ),
+                    const SizedBox(height: 18),
+                    // From Date
+                    GestureDetector(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: DateTime.now().subtract(const Duration(days: 1)),
+                          firstDate: DateTime(2024),
+                          lastDate: DateTime.now(),
+                          helpText: 'Select Start Date',
+                          builder: (c, child) => Theme(
+                            data: ThemeData.dark().copyWith(
+                              colorScheme: const ColorScheme.dark(
+                                primary: Colors.cyanAccent,
+                                onPrimary: Colors.black,
+                              ),
+                            ),
+                            child: child!,
+                          ),
+                        );
+                        if (picked != null) setDlgState(() => fromDate = picked);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: fromDate != null ? Colors.cyanAccent : Colors.white24),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.calendar_today, size: 16, color: fromDate != null ? Colors.cyanAccent : Colors.white38),
+                            const SizedBox(width: 10),
+                            Text('From: $fromLabel', style: TextStyle(color: fromDate != null ? Colors.white : Colors.white38, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // To Date
+                    GestureDetector(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: DateTime.now(),
+                          firstDate: fromDate ?? DateTime(2024),
+                          lastDate: DateTime.now(),
+                          helpText: 'Select End Date',
+                          builder: (c, child) => Theme(
+                            data: ThemeData.dark().copyWith(
+                              colorScheme: const ColorScheme.dark(
+                                primary: Colors.cyanAccent,
+                                onPrimary: Colors.black,
+                              ),
+                            ),
+                            child: child!,
+                          ),
+                        );
+                        if (picked != null) setDlgState(() => toDate = picked);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: toDate != null ? Colors.cyanAccent : Colors.white24),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.calendar_today, size: 16, color: toDate != null ? Colors.cyanAccent : Colors.white38),
+                            const SizedBox(width: 10),
+                            Text('To: $toLabel', style: TextStyle(color: toDate != null ? Colors.white : Colors.white38, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Colors.white24),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: fromDate != null && toDate != null
+                              ? () {
+                                  Navigator.pop(ctx);
+                                  _downloadRangeReport(fromDate!, toDate!);
+                                }
+                              : null,
+                            icon: const Icon(Icons.download, size: 16, color: Colors.white),
+                            label: const Text('Download PDF', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF003580),
+                              disabledBackgroundColor: Colors.white12,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _downloadRangeReport(DateTime from, DateTime to) async {
+    final fromStr = '${from.year}-${from.month.toString().padLeft(2,'0')}-${from.day.toString().padLeft(2,'0')}';
+    final toStr = '${to.year}-${to.month.toString().padLeft(2,'0')}-${to.day.toString().padLeft(2,'0')}';
+    final url = ApiService.getRangeReportPdfUrl(fromStr, toStr);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Preparing Indian Railways Range Report PDF...'), backgroundColor: Color(0xFF003580)),
       );
     }
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to open report: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  Widget _buildHistoryList() {
 
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(12.0),
       itemCount: _historySessions.length,
       itemBuilder: (context, index) {
         final session = _historySessions[index];
         final duration = session['duration'] ?? '--';
+        final yard = session['yard'];
+        final line = session['line'];
+        final locationStr = yard != null ? '$yard${line != null ? ' · $line' : ''}' : 'Yard not assigned';
 
         return Container(
-          margin: const EdgeInsets.only(bottom: 14.0),
+          margin: const EdgeInsets.only(bottom: 12.0),
           decoration: BoxDecoration(
             color: const Color(0xFF1E293B),
             borderRadius: BorderRadius.circular(16),
@@ -608,7 +843,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
               borderRadius: BorderRadius.circular(16),
               onTap: () => _showSessionSummaryDialog(session),
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(14.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -640,24 +875,24 @@ class _SessionsScreenState extends State<SessionsScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     Row(
                       children: [
                         Expanded(
-                          child: _buildHistoryDeviceTag(session['ldDevice'] ?? 'RX', Icons.train, Colors.lightBlueAccent, label: 'RECEIVER'),
+                          child: _buildHistoryDeviceTag(session['ldDevice'] ?? '--', Icons.train, Colors.lightBlueAccent, label: 'RECEIVER'),
                         ),
                         const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 8.0),
                           child: Icon(Icons.sync_alt, size: 16, color: Colors.cyanAccent),
                         ),
                         Expanded(
-                          child: _buildHistoryDeviceTag(session['deDevice'] ?? 'TX', Icons.sensors, Colors.amberAccent, label: 'TRANSMITTER'),
+                          child: _buildHistoryDeviceTag(session['deDevice'] ?? 'N/A', Icons.sensors, Colors.amberAccent, label: 'TRANSMITTER'),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(8),
@@ -672,8 +907,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
                               const Text('Min Proximity', style: TextStyle(fontSize: 10, color: Colors.white38)),
                               const SizedBox(height: 2),
                               Text(
-                                session['minDistance'] ?? '--m',
-                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orangeAccent, fontSize: 15),
+                                session['minDistance'] ?? '--',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orangeAccent, fontSize: 14),
                               ),
                             ],
                           ),
@@ -684,38 +919,47 @@ class _SessionsScreenState extends State<SessionsScreen> {
                               const Text('Final Placement', style: TextStyle(fontSize: 10, color: Colors.white38)),
                               const SizedBox(height: 2),
                               Text(
-                                session['finalPlacement'] ?? session['distance'] ?? 'N/A',
-                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent, fontSize: 15),
+                                session['finalPlacement'] ?? session['distance'] ?? '--',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent, fontSize: 14),
                               ),
                             ],
                           ),
                         ],
                       ),
                     ),
-                    const Divider(height: 24, color: Colors.white10),
+                    const Divider(height: 20, color: Colors.white10),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.person_outline, size: 14, color: Colors.white60),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Pilot: ${session['holder'] ?? 'N/A'}',
-                              style: const TextStyle(fontSize: 12, color: Colors.white70),
-                            ),
-                          ],
+                        Expanded(
+                          child: Row(
+                            children: [
+                              const Icon(Icons.location_on_outlined, size: 13, color: Colors.white38),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  locationStr,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: yard != null ? Colors.white60 : Colors.white24,
+                                    fontStyle: yard == null ? FontStyle.italic : FontStyle.normal,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         Row(
                           children: [
-                            const Icon(Icons.timer_outlined, size: 14, color: Colors.white60),
+                            const Icon(Icons.timer_outlined, size: 13, color: Colors.white38),
                             const SizedBox(width: 4),
                             Text(
                               duration != '--' ? duration : '${_formatTime(session['startTime'])} - ${_formatTime(session['endTime'])}',
-                              style: const TextStyle(fontSize: 12, color: Colors.white60),
+                              style: const TextStyle(fontSize: 11, color: Colors.white60),
                             ),
                             const SizedBox(width: 6),
-                            const Icon(Icons.chevron_right, size: 16, color: Colors.white38),
+                            const Icon(Icons.chevron_right, size: 14, color: Colors.white24),
                           ],
                         ),
                       ],
@@ -1248,9 +1492,9 @@ class _SessionAuditDialogState extends State<SessionAuditDialog> with SingleTick
           _buildSummaryRow('Operation Duration', _sessionDetail['duration'] ?? '--'),
           _buildSummaryRow('Session Start (IST)', _formatTime(_sessionDetail['startTime'])),
           _buildSummaryRow('Session End (IST)', _sessionDetail['endTime'] != null ? _formatTime(_sessionDetail['endTime']) : 'LIVE'),
-          _buildSummaryRow('Assigned Yard', _sessionDetail['yard'] ?? 'North Yard'),
-          _buildSummaryRow('Track / Pit Line', _sessionDetail['line'] ?? 'Main Shunt Line'),
-          _buildSummaryRow('Loco Pilot / Holder', '${_sessionDetail['holder'] ?? _sessionDetail['holderName'] ?? 'ian'} (${_sessionDetail['holderEmployeeId'] ?? 'EMP-001'})'),
+          _buildSummaryRow('Assigned Yard', _sessionDetail['yard'] ?? 'Not Assigned'),
+          _buildSummaryRow('Track / Pit Line', _sessionDetail['line'] ?? 'Not Assigned'),
+          _buildSummaryRow('Loco Pilot / Holder', _sessionDetail['holder'] != null ? '${_sessionDetail['holder']} (${_sessionDetail['holderEmployeeId'] ?? '--'})' : 'Not Assigned'),
           _buildSummaryRow('Total Logged Data Points', '${_tabularLogs.length} Telemetry Records'),
           if (_sessionDetail['remarks'] != null && _sessionDetail['remarks'].toString().isNotEmpty)
             _buildSummaryRow('Close Reason', _sessionDetail['remarks'].toString()),

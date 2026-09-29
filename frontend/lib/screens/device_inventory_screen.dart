@@ -233,6 +233,91 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
     }
   }
 
+  Future<void> _toggleDeviceDisabled(dynamic device) async {
+    final deviceId = device['device_id'] ?? device['device_code'] ?? 'Unknown';
+    final isCurrentlyDisabled = device['is_disabled'] == true;
+    final action = isCurrentlyDisabled ? 'enable' : 'disable';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: isCurrentlyDisabled ? Colors.green.shade700 : Colors.orange.shade700,
+            width: 1.5,
+          ),
+        ),
+        title: Row(
+          children: [
+            Icon(
+              isCurrentlyDisabled ? Icons.check_circle : Icons.block,
+              color: isCurrentlyDisabled ? Colors.greenAccent : Colors.orange,
+              size: 24,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              isCurrentlyDisabled ? 'Enable Device' : 'Disable Device',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+          ],
+        ),
+        content: Text(
+          isCurrentlyDisabled
+            ? 'Enable "$deviceId"? It will be available for assignment and appear in sessions.'
+            : 'Disable "$deviceId"? It will be hidden from assignment lists and excluded from sessions.',
+          style: const TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isCurrentlyDisabled ? Colors.green.shade700 : Colors.orange.shade700,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text(
+              isCurrentlyDisabled ? 'Enable Now' : 'Disable Now',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    final res = await ApiService.toggleDeviceDisabled(deviceId.toString());
+    if (!mounted) return;
+    if (res['success'] == true) {
+      final newState = res['data']?['is_disabled'] ?? !isCurrentlyDisabled;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            newState
+              ? 'Device $deviceId has been disabled and will not appear in assignments.'
+              : 'Device $deviceId has been enabled and is now available.',
+          ),
+          backgroundColor: newState ? Colors.orange.shade700 : Colors.green.shade700,
+        ),
+      );
+      _fetchInventory();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message'] ?? 'Failed to $action device'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final session = UserSession();
@@ -726,8 +811,9 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
     final serialNumber = device['serial_number'] ?? 'N/A';
     final productType = (device['product_type'] ?? 'RECEIVER').toString().toUpperCase();
     final deviceType = device['device_type'] ?? (productType == 'TRANSMITTER' ? 'Dead-End' : 'Loco Unit');
-    final healthStatus = (device['health_status'] ?? 'OFFLINE').toString().toUpperCase();
+    final healthStatus = (device['health_status'] ?? device['computed_status'] ?? 'OFFLINE').toString().toUpperCase();
     final isOnline = healthStatus == 'ONLINE';
+    final isDisabled = device['is_disabled'] == true;
     final hwVer = device['hardware_version'] ?? '1.0';
     final fwVer = device['firmware_version'] ?? '1.0.0';
     final lineName = device['line_name'];
@@ -746,17 +832,19 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: isDisabled ? const Color(0xFF141C28) : const Color(0xFF1E293B),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isOnline
-              ? const Color(0xFF10B981).withValues(alpha: 0.4)
-              : const Color(0xFF334155),
-          width: isOnline ? 1.5 : 1.0,
+          color: isDisabled
+              ? Colors.white12
+              : isOnline
+                  ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                  : const Color(0xFF334155),
+          width: isOnline && !isDisabled ? 1.5 : 1.0,
         ),
         boxShadow: [
           BoxShadow(
-            color: isOnline
+            color: isOnline && !isDisabled
                 ? const Color(0xFF10B981).withValues(alpha: 0.08)
                 : Colors.black.withValues(alpha: 0.2),
             blurRadius: 8,
@@ -767,6 +855,26 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Disabled Banner
+          if (isDisabled)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+              decoration: const BoxDecoration(
+                color: Color(0xFF1F1A2E),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.block, color: Color(0xFFF87171), size: 12),
+                  SizedBox(width: 6),
+                  Text(
+                    'DEVICE DISABLED — Will not appear in assignment or sessions',
+                    style: TextStyle(color: Color(0xFFF87171), fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
           // Header Row
           Padding(
             padding: const EdgeInsets.all(14),
@@ -1213,6 +1321,47 @@ class _DeviceInventoryScreenState extends State<DeviceInventoryScreen> {
                     ),
                     if (session.canManageDevices) ...[
                       const SizedBox(width: 8),
+                      // Enable/Disable Device toggle
+                      Tooltip(
+                        message: isDisabled ? 'Enable Device' : 'Disable Device',
+                        child: GestureDetector(
+                          onTap: () => _toggleDeviceDisabled(device),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isDisabled
+                                ? const Color(0xFF10B981).withValues(alpha: 0.1)
+                                : const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: isDisabled
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.5)
+                                  : const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isDisabled ? Icons.check_circle_outline : Icons.block,
+                                  size: 12,
+                                  color: isDisabled ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  isDisabled ? 'Enable' : 'Disable',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDisabled ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
                       // Delete Device button
                       IconButton(
                         icon: const Icon(Icons.delete_outline, color: Color(0xFFF87171), size: 18),

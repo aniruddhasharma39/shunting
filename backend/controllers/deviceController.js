@@ -67,17 +67,21 @@ const registerDevice = async (req, res) => {
   }
 };
 
-// @desc    Get all devices
+// @desc    Get all devices (joins device_registry + devices, respects is_disabled)
 // @route   GET /api/devices
 // @access  Private
 const getDevices = async (req, res) => {
   try {
-    const { product_type, device_type, status, search } = req.query;
+    const { product_type, device_type, status, search, include_disabled } = req.query;
+
+    // Optionally include disabled devices (only for admin view)
+    const showDisabled = include_disabled === 'true';
 
     let query = `
       SELECT 
         COALESCE(d.id, dr.id) as id,
         COALESCE(d.device_code, dr.device_id) as device_code,
+        COALESCE(d.device_id, dr.device_id) as device_id,
         COALESCE(
           d.device_type,
           CASE 
@@ -102,14 +106,25 @@ const getDevices = async (req, res) => {
         COALESCE(d.yard_id, dr.yard_id, yl.yard_id) as yard_id,
         COALESCE(d.assigned_line_id, dr.assigned_line_id) as assigned_line_id,
         COALESCE(d.firmware_version, dr.firmware_version) as firmware_version,
-        COALESCE(d.battery_level, (dt.latest_battery::text || '%'), '95%') as battery_level,
-        COALESCE(dr.health_status, d.network_status, CASE WHEN dt.latest_rec >= (NOW() - INTERVAL '30 SECONDS') THEN 'Online' ELSE 'Offline' END) as network_status,
+        -- Real battery: from telemetry, then device table, never hardcoded
+        CASE 
+          WHEN dt.latest_battery IS NOT NULL THEN (dt.latest_battery::text || '%')
+          WHEN d.battery_level IS NOT NULL AND d.battery_level != '95%' AND d.battery_level != '90%' THEN d.battery_level
+          ELSE NULL
+        END as battery_level,
+        -- Real status: based on 30-second telemetry rule
+        CASE 
+          WHEN dt.latest_rec >= (NOW() - INTERVAL '30 SECONDS') THEN 'ONLINE'
+          WHEN dr.last_reading_timestamp >= (NOW() - INTERVAL '30 SECONDS') THEN 'ONLINE'
+          ELSE 'OFFLINE'
+        END as network_status,
         COALESCE(dr.last_reading_timestamp, d.last_heartbeat, dt.latest_rec) as last_heartbeat,
         COALESCE(d.condition_status, 'GOOD') as condition_status,
         d.sim_status,
         yl.line_name,
         yl.line_number,
         y.yard_name,
+        COALESCE(dr.is_disabled, FALSE) as is_disabled,
         -- Active assignment info (Holder)
         CASE WHEN active_da.id IS NOT NULL THEN TRUE ELSE FALSE END as is_issued,
         active_da.id as active_assignment_id,
@@ -133,6 +148,10 @@ const getDevices = async (req, res) => {
       LEFT JOIN users active_u ON active_da.employee_id = active_u.id
       WHERE 1=1
     `;
+
+    if (!showDisabled) {
+      query += ` AND (dr.is_disabled IS NULL OR dr.is_disabled = FALSE)`;
+    }
 
     const params = [];
 
@@ -158,12 +177,13 @@ const getDevices = async (req, res) => {
       rows = rows.filter(d => {
         const pType = (d.product_type || '').toUpperCase();
         const dType = (d.device_type || '').toUpperCase();
+        const code = (d.device_code || '').toUpperCase();
         if (targetType === 'RECEIVER' || targetType === 'LOCO UNIT') {
-          return pType.includes('RECEIVER') || dType.includes('LOCO') || d.device_code.startsWith('RX') || d.device_code.startsWith('LD');
+          return pType.includes('RECEIVER') || dType.includes('LOCO') || code.startsWith('RX') || code.startsWith('LD');
         } else if (targetType === 'TRANSMITTER' || targetType === 'DEAD-END') {
-          return pType.includes('TRANSMITTER') || dType.includes('DEAD') || d.device_code.startsWith('TX') || d.device_code.startsWith('DE');
+          return pType.includes('TRANSMITTER') || dType.includes('DEAD') || code.startsWith('TX') || code.startsWith('DE');
         } else if (targetType === 'REPEATER' || targetType === 'PORTABLE') {
-          return pType.includes('REPEATER') || dType.includes('PORTABLE') || d.device_code.startsWith('RP') || d.device_code.startsWith('PD');
+          return pType.includes('REPEATER') || dType.includes('PORTABLE') || code.startsWith('RP') || code.startsWith('PD');
         }
         return pType === targetType || dType === targetType;
       });
@@ -171,11 +191,9 @@ const getDevices = async (req, res) => {
 
     if (status) {
       if (status === 'available_for_issue') {
-        // Receivers not currently issued
-        rows = rows.filter(d => !d.is_issued);
+        rows = rows.filter(d => !d.is_issued && !d.is_disabled);
       } else if (status === 'available_for_line') {
-        // Transmitters not currently assigned to a line
-        rows = rows.filter(d => !d.assigned_line_id);
+        rows = rows.filter(d => !d.assigned_line_id && !d.is_disabled);
       } else if (status === 'issued') {
         rows = rows.filter(d => d.is_issued);
       } else if (status === 'assigned') {
@@ -199,6 +217,15 @@ const issueDevice = async (req, res) => {
 
     if (!device_id || !employee_id) {
       return res.status(400).json({ message: 'device_id and employee_id are required' });
+    }
+
+    // Ensure device is not disabled
+    const devCheck = await db.query(
+      `SELECT dr.is_disabled FROM device_registry dr WHERE dr.id::text = $1 OR dr.device_id IN (SELECT device_code FROM devices WHERE id::text = $1)`,
+      [device_id]
+    );
+    if (devCheck.rows[0]?.is_disabled === true) {
+      return res.status(400).json({ message: 'Device is disabled and cannot be issued' });
     }
 
     // Insert assignment
@@ -280,11 +307,26 @@ const assignLine = async (req, res) => {
       return res.status(404).json({ message: 'Device not found' });
     }
 
-    // Also update device_registry
-    await db.query(
-      'UPDATE device_registry SET assigned_line_id = $1 WHERE id = $2 OR device_id = $3',
-      [assigned_line_id || null, id, result.rows[0].device_code]
-    );
+    // Also update device_registry - sync yard_id from line's yard if assigning
+    if (assigned_line_id) {
+      const lineRes = await db.query('SELECT yard_id FROM yard_lines WHERE id = $1', [assigned_line_id]);
+      const lineYardId = lineRes.rows[0]?.yard_id;
+      await db.query(
+        'UPDATE device_registry SET assigned_line_id = $1, yard_id = COALESCE($2, yard_id) WHERE id = $3 OR device_id = $4',
+        [assigned_line_id || null, lineYardId || null, id, result.rows[0].device_code]
+      );
+      if (lineYardId) {
+        await db.query(
+          'UPDATE devices SET yard_id = $1 WHERE id = $2',
+          [lineYardId, id]
+        );
+      }
+    } else {
+      await db.query(
+        'UPDATE device_registry SET assigned_line_id = NULL WHERE id = $1 OR device_id = $2',
+        [id, result.rows[0].device_code]
+      );
+    }
 
     res.json(result.rows[0]);
   } catch (error) {
@@ -293,10 +335,55 @@ const assignLine = async (req, res) => {
   }
 };
 
+// @desc    Toggle device disabled/enabled
+// @route   PUT /api/devices/:id/toggle-disabled
+// @access  Super Admin / Hardware Engineer
+const toggleDeviceDisabled = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Find device in registry
+    const findRes = await db.query(
+      `SELECT dr.id, dr.device_id, COALESCE(dr.is_disabled, FALSE) as is_disabled
+       FROM device_registry dr
+       WHERE dr.device_id = $1 OR dr.id::text = $1`,
+      [id]
+    );
+
+    if (findRes.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Device not found' });
+    }
+
+    const device = findRes.rows[0];
+    const newState = !device.is_disabled;
+
+    // Ensure column exists first (idempotent migration)
+    try {
+      await db.query(`ALTER TABLE device_registry ADD COLUMN IF NOT EXISTS is_disabled BOOLEAN DEFAULT FALSE`);
+    } catch (_) {}
+
+    await db.query(
+      `UPDATE device_registry SET is_disabled = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      [newState, device.id]
+    );
+
+    res.json({
+      success: true,
+      deviceId: device.device_id,
+      is_disabled: newState,
+      message: `Device ${device.device_id} has been ${newState ? 'disabled' : 'enabled'} successfully`
+    });
+  } catch (error) {
+    console.error('Error in toggleDeviceDisabled:', error);
+    res.status(500).json({ success: false, message: 'Server error toggling device state' });
+  }
+};
+
 module.exports = {
   registerDevice,
   getDevices,
   issueDevice,
   returnDevice,
-  assignLine
+  assignLine,
+  toggleDeviceDisabled
 };

@@ -49,12 +49,19 @@ function normalizeDeviceType(productType, deviceId) {
 // @access  Hardware Engineer / Super Admin / Yard Admin / Viewer
 const getRegistryDevices = async (req, res) => {
   try {
-    const { search, product_type, health_status } = req.query;
+    const { search, product_type, health_status, include_disabled } = req.query;
+    const showDisabled = include_disabled === 'true';
+
+    // Ensure is_disabled column exists (idempotent)
+    try {
+      await db.query(`ALTER TABLE device_registry ADD COLUMN IF NOT EXISTS is_disabled BOOLEAN DEFAULT FALSE`);
+    } catch (_) {}
 
     // Join latest telemetry timestamp from device_telemetry and line/yard info
     let query = `
       SELECT 
         dr.*,
+        COALESCE(dr.is_disabled, FALSE) AS is_disabled,
         COALESCE(dr.device_type, 
           CASE 
             WHEN dr.product_type ILIKE '%RECEIVER%' OR dr.device_id ILIKE '%RECEIVER%' OR dr.device_id ILIKE 'RX%' OR dr.device_id ILIKE 'LD%' THEN 'Loco Unit'
@@ -85,6 +92,12 @@ const getRegistryDevices = async (req, res) => {
       LEFT JOIN yards y ON COALESCE(dr.yard_id, yl.yard_id) = y.id
       WHERE 1=1
     `;
+
+    if (!showDisabled) {
+      // Include disabled devices only when explicitly requested (for admin device inventory view)
+      // Default: show all (including disabled) for inventory management, but filter for yard/issue
+    }
+
     const params = [];
 
     if (search && search.trim() !== '') {
@@ -799,6 +812,47 @@ const uploadDeviceImagesOnly = async (req, res) => {
   }
 };
 
+// @desc    Toggle device disabled/enabled state
+// @route   PUT /api/device-registry/:deviceId/toggle-disabled
+// @access  Super Admin / Hardware Engineer / Yard Admin
+const toggleRegistryDeviceDisabled = async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+
+    // Ensure column exists
+    try {
+      await db.query(`ALTER TABLE device_registry ADD COLUMN IF NOT EXISTS is_disabled BOOLEAN DEFAULT FALSE`);
+    } catch (_) {}
+
+    const findRes = await db.query(
+      `SELECT id, device_id, COALESCE(is_disabled, FALSE) as is_disabled FROM device_registry WHERE device_id = $1 OR id::text = $1`,
+      [deviceId]
+    );
+
+    if (findRes.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Device not found' });
+    }
+
+    const device = findRes.rows[0];
+    const newState = !device.is_disabled;
+
+    await db.query(
+      `UPDATE device_registry SET is_disabled = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      [newState, device.id]
+    );
+
+    res.json({
+      success: true,
+      deviceId: device.device_id,
+      is_disabled: newState,
+      message: `Device ${device.device_id} has been ${newState ? 'disabled' : 'enabled'} successfully`
+    });
+  } catch (error) {
+    console.error('Error in toggleRegistryDeviceDisabled:', error);
+    res.status(500).json({ success: false, message: 'Server error toggling device state' });
+  }
+};
+
 module.exports = {
   getRegistryDevices,
   getRegistryDeviceById,
@@ -806,5 +860,6 @@ module.exports = {
   ingestDeviceTelemetry,
   upsertRegistryDevice,
   deleteRegistryDevice,
-  uploadDeviceImagesOnly
+  uploadDeviceImagesOnly,
+  toggleRegistryDeviceDisabled
 };
