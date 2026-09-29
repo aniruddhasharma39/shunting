@@ -121,10 +121,45 @@ exports.generatePDF = async (req, res) => {
 
     doc.pipe(res);
     
-    doc.fontSize(20).text('SafeShunt - Reports & Audits', { align: 'center' });
-    doc.moveDown();
-    doc.fontSize(14).text(`Report Type: ${reportType || 'Standard'}`, { align: 'left' });
-    doc.fontSize(10).text(`Generated On: ${new Date().toLocaleString()}`, { align: 'left' });
+    const navyBlue = '#003580';
+    const saffron = '#FF6600';
+    const deepGreen = '#046A38';
+
+    // Top banner
+    doc.rect(0, 0, doc.page.width, 90).fill(navyBlue);
+
+    // IR Logo on the LEFT
+    const irLogoPath = path.join(__dirname, '../assets/ir_logo.jpg');
+    if (fs.existsSync(irLogoPath)) {
+      try { doc.image(irLogoPath, 14, 8, { width: 68, height: 68 }); } catch (_) {}
+    }
+
+    // Azadi Logo on the RIGHT
+    const azadiLogoPath = path.join(__dirname, '../assets/azadi_logo.png');
+    if (fs.existsSync(azadiLogoPath)) {
+      try { doc.image(azadiLogoPath, doc.page.width - 90, 8, { width: 72, height: 68 }); } catch (_) {}
+    }
+
+    // Center text block
+    doc.fillColor('white').fontSize(9).font('Helvetica')
+       .text('Government of India', 0, 11, { align: 'center' })
+       .text('Ministry of Railways', 0, 23, { align: 'center' });
+
+    doc.fillColor('white').fontSize(18).font('Helvetica-Bold')
+       .text('INDIAN RAILWAYS', 0, 35, { align: 'center' });
+
+    doc.fillColor('#E8D5A3').fontSize(10).font('Helvetica')
+       .text('SafeShunt - Reports & Audits', 0, 57, { align: 'center' });
+
+    // Tricolor stripe
+    doc.rect(0, 72, doc.page.width, 5).fill(saffron);
+    doc.rect(0, 77, doc.page.width, 5).fill('white');
+    doc.rect(0, 82, doc.page.width, 5).fill(deepGreen);
+
+    doc.y = 105;
+    
+    doc.fillColor('black').fontSize(14).font('Helvetica-Bold').text(`Report Type: ${reportType || 'Standard'}`, 40, doc.y, { align: 'left' });
+    doc.fontSize(10).font('Helvetica').text(`Generated On: ${new Date().toLocaleString()}`, { align: 'left' });
     doc.moveDown();
 
     doc.fontSize(12).text('Applied Filters:', { underline: true });

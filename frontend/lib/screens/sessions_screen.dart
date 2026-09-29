@@ -573,6 +573,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
   // ==========================================
   Widget _buildHistoryTab() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Date Range Report Banner
         Container(
