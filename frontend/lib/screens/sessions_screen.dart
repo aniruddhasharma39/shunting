@@ -572,13 +572,14 @@ class _SessionsScreenState extends State<SessionsScreen> {
   // 2. SESSION HISTORY TAB
   // ==========================================
   Widget _buildHistoryTab() {
-    return CustomScrollView(
+    return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        // Date Range Report Banner
-        SliverToBoxAdapter(
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      padding: const EdgeInsets.all(12.0),
+      itemCount: _historySessions.isEmpty ? 2 : _historySessions.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
@@ -613,24 +614,23 @@ class _SessionsScreenState extends State<SessionsScreen> {
                 ),
               ],
             ),
-          ),
-        ),
-        // Session List
-        if (_historySessions.isEmpty)
-          const SliverFillRemaining(
+          );
+        }
+
+        if (_historySessions.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.only(top: 100),
             child: Center(
               child: Text(
                 'No past shunting sessions recorded yet.',
                 style: TextStyle(color: Colors.white38),
               ),
             ),
-          )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.all(12.0),
-            sliver: _buildHistoryList(),
-          ),
-      ],
+          );
+        }
+
+        return _buildHistorySessionItem(_historySessions[index - 1]);
+      },
     );
   }
 
@@ -818,11 +818,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
     }
   }
 
-  Widget _buildHistoryList() {
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          final session = _historySessions[index];
+  Widget _buildHistorySessionItem(dynamic session) {
         final duration = session['duration'] ?? '--';
         final yard = session['yard'];
         final line = session['line'];
@@ -968,9 +964,6 @@ class _SessionsScreenState extends State<SessionsScreen> {
             ),
           ),
         );
-      },
-      childCount: _historySessions.length,
-    ));
   }
 
   void _showSessionSummaryDialog(dynamic session) {
