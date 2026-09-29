@@ -572,64 +572,64 @@ class _SessionsScreenState extends State<SessionsScreen> {
   // 2. SESSION HISTORY TAB
   // ==========================================
   Widget _buildHistoryTab() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
         // Date Range Report Banner
-        Container(
-          margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF1E3A5F), Color(0xFF0F2340)],
+        SliverToBoxAdapter(
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1E3A5F), Color(0xFF0F2340)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.4)),
             ),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.4)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.picture_as_pdf, color: Color(0xFF60A5FA), size: 20),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Duration-Wise Bulk Report', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                    Text('Download Indian Railways PDF for a date range', style: TextStyle(color: Colors.white54, fontSize: 10)),
-                  ],
+            child: Row(
+              children: [
+                const Icon(Icons.picture_as_pdf, color: Color(0xFF60A5FA), size: 20),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Duration-Wise Bulk Report', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                      Text('Download Indian Railways PDF for a date range', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                    ],
+                  ),
                 ),
-              ),
-              ElevatedButton.icon(
-                onPressed: _showRangeReportDialog,
-                icon: const Icon(Icons.download, size: 14, color: Colors.white),
-                label: const Text('Download', style: TextStyle(fontSize: 11, color: Colors.white)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  elevation: 0,
+                ElevatedButton.icon(
+                  onPressed: _showRangeReportDialog,
+                  icon: const Icon(Icons.download, size: 14, color: Colors.white),
+                  label: const Text('Download', style: TextStyle(fontSize: 11, color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    elevation: 0,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         // Session List
-        Expanded(
-          child: _historySessions.isEmpty
-            ? ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: const [
-                  SizedBox(height: 100),
-                  Center(
-                    child: Text(
-                      'No past shunting sessions recorded yet.',
-                      style: TextStyle(color: Colors.white38),
-                    ),
-                  ),
-                ],
-              )
-            : _buildHistoryList(),
-        ),
+        if (_historySessions.isEmpty)
+          const SliverFillRemaining(
+            child: Center(
+              child: Text(
+                'No past shunting sessions recorded yet.',
+                style: TextStyle(color: Colors.white38),
+              ),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.all(12.0),
+            sliver: _buildHistoryList(),
+          ),
       ],
     );
   }
@@ -819,13 +819,10 @@ class _SessionsScreenState extends State<SessionsScreen> {
   }
 
   Widget _buildHistoryList() {
-
-    return ListView.builder(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(12.0),
-      itemCount: _historySessions.length,
-      itemBuilder: (context, index) {
-        final session = _historySessions[index];
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final session = _historySessions[index];
         final duration = session['duration'] ?? '--';
         final yard = session['yard'];
         final line = session['line'];
@@ -972,7 +969,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
           ),
         );
       },
-    );
+      childCount: _historySessions.length,
+    ));
   }
 
   void _showSessionSummaryDialog(dynamic session) {
