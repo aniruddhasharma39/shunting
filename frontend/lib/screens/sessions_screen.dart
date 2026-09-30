@@ -11,7 +11,7 @@ import '../services/api_service.dart';
 import '../services/user_session.dart';
 import 'live_telemetry_screen.dart';
 import 'package:open_file/open_file.dart';
-
+import '../utils/download_helper.dart';
 class SessionsScreen extends StatefulWidget {
   const SessionsScreen({super.key});
 
@@ -979,13 +979,44 @@ class _SessionsScreenState extends State<SessionsScreen> {
     final token = await UserSession().token ?? '';
     final url = '${ApiService.baseUrl}/reports/range/pdf?$query&token=$token';
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Generating Filtered Report...'), backgroundColor: Color(0xFF003580)),
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: Color(0xFF003580)),
+            SizedBox(height: 16),
+            Text('Downloading Report...'),
+          ],
+        ),
+      ),
     );
+
     try {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      final response = await http.get(Uri.parse(url));
+      if (context.mounted) Navigator.pop(context); // close dialog
+
+      if (response.statusCode == 200) {
+        await downloadAndOpenPdf(response.bodyBytes, 'SafeShunt_Sessions_${fromStr}_to_${toStr}.pdf');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Report Downloaded Successfully!'), backgroundColor: Colors.green),
+          );
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed: Server returned ${response.statusCode}'), backgroundColor: Colors.redAccent),
+          );
+        }
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.redAccent));
+      if (context.mounted) Navigator.pop(context); // close dialog
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.redAccent));
+      }
     }
   }
 

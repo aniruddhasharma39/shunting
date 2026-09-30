@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'user_session.dart';
 
 class ApiService {
@@ -10,13 +11,23 @@ class ApiService {
   // IMPORTANT:
   // - For Web/Chrome testing: '127.0.0.1' or 'localhost'
   // - For Android Emulator: '10.0.2.2'
-  // - For Physical Phone (APK): Use your computer's WiFi IPv4 Address (e.g. '192.168.x.x')
-  static const String localIp = '127.0.0.1';
+  // - For Physical Phone (APK): Use your computer's WiFi IPv4 Address (e.g. '192.168.1.18')
   static const String localPort = '5000'; // Change to 3000 if your backend uses 3000
 
-  static const String baseUrl = useLocalhost
-      ? 'http://$localIp:$localPort/api'
-      : 'https://shunting-backend.onrender.com/api';
+  static String get baseUrl {
+    if (!useLocalhost) {
+      return 'https://shunting-backend.onrender.com/api';
+    }
+
+    if (kIsWeb) {
+      return 'http://127.0.0.1:$localPort/api';
+    } else if (defaultTargetPlatform == TargetPlatform.android) {
+      // Use your computer's local IPv4 address so the physical phone can connect over Wi-Fi
+      return 'http://192.168.1.18:$localPort/api';
+    } else {
+      return 'http://127.0.0.1:$localPort/api';
+    }
+  }
 
   /// Get auth headers with Bearer token
   static Map<String, String> _authHeaders() {

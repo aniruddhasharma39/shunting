@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
 import '../theme/app_theme.dart';
 import '../widgets/app_drawer.dart';
 import '../services/api_service.dart';
+import '../utils/download_helper.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -524,12 +525,40 @@ class _ReportsScreenState extends State<ReportsScreen> {
       
       final uri = Uri.parse('${ApiService.baseUrl.replaceAll('/api', '')}/api/reports/generate/$format').replace(queryParameters: queryParams);
       
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Color(0xFF003580)),
+              SizedBox(height: 16),
+              Text('Downloading Report...'),
+            ],
+          ),
+        ),
+      );
+
+      final token = await UserSession().token;
+      final response = await http.get(
+        uri,
+        headers: token != null ? {'Authorization': 'Bearer $token'} : {},
+      );
+      if (mounted) Navigator.pop(context); // close dialog
+
+      if (response.statusCode == 200) {
+        String filename = 'SafeShunt_${_selectedReportType}_Report.$format';
+        await downloadAndOpenPdf(response.bodyBytes, filename);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Report Downloaded Successfully!'), backgroundColor: Colors.green),
+          );
+        }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not launch $format download. Make sure backend is running.')),
+            SnackBar(content: Text('Failed: Server returned ${response.statusCode}'), backgroundColor: Colors.redAccent),
           );
         }
       }
