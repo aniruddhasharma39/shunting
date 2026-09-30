@@ -187,8 +187,9 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 32),
             
             // Footer
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: const [
                 Text('System v2.4.1', style: TextStyle(fontSize: 12, color: AppTheme.subtitleColor)),
                 Padding(

@@ -805,7 +805,7 @@ exports.generateRangeReportPDF = async (req, res) => {
          .fillAndStroke('#F8FAFF', '#D0D8E8');
 
       // Card header bar
-      doc.roundedRect(35, cardY, cardWidth, 22, [8, 8, 0, 0])
+      doc.roundedRect(35, cardY, cardWidth, 22, 8)
          .fill(navyBlue);
 
       doc.fillColor('white').fontSize(8.5).font('Helvetica-Bold')
