@@ -212,6 +212,40 @@ class ApiService {
     }
   }
 
+  /// Delete a yard (Super Admin only)
+  static Future<Map<String, dynamic>> deleteYard(String yardId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/yards/$yardId'),
+        headers: _authHeaders(),
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': 'Yard deleted successfully'};
+      }
+      final data = jsonDecode(response.body);
+      return {'success': false, 'message': data['message'] ?? 'Failed to delete yard'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error.'};
+    }
+  }
+
+  /// Delete a yard line (Super Admin only)
+  static Future<Map<String, dynamic>> deleteYardLine(String yardId, String lineId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/yards/$yardId/lines/$lineId'),
+        headers: _authHeaders(),
+      );
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': 'Yard line deleted successfully'};
+      }
+      final data = jsonDecode(response.body);
+      return {'success': false, 'message': data['message'] ?? 'Failed to delete yard line'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error.'};
+    }
+  }
+
   /// Toggle user active/inactive (Super Admin only)
   static Future<Map<String, dynamic>> toggleUserActive(String userId) async {
     try {
@@ -386,6 +420,49 @@ class ApiService {
     } catch (e) {
       return {'success': false, 'message': 'Network error.'};
     }
+  }
+
+  static Future<Map<String, dynamic>> fetchDeviceAssignments({String? startDate, String? endDate, List<String>? devices}) async {
+    try {
+      List<String> queries = [];
+      if (startDate != null && endDate != null) {
+        queries.add('startDate=$startDate');
+        queries.add('endDate=$endDate');
+      }
+      if (devices != null && devices.isNotEmpty) {
+        queries.add('devices=${devices.join(',')}');
+      }
+      final queryString = queries.isNotEmpty ? '?${queries.join('&')}' : '';
+      
+      final response = await http.get(Uri.parse('$baseUrl/devices/assignments$queryString'), headers: _authHeaders());
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'success': true, 'data': data['data'] ?? data};
+      return {'success': false, 'message': data['message'] ?? 'Failed to load assignments'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error.'};
+    }
+  }
+
+  static String getDeviceHistoryPdfUrl({String? startDate, String? endDate, List<String>? devices}) {
+    final filters = <String, dynamic>{};
+    if (startDate != null) filters['fromDate'] = startDate;
+    if (endDate != null) filters['toDate'] = endDate;
+    if (devices != null && devices.isNotEmpty) filters['deviceCodes'] = devices;
+    
+    final filterStr = Uri.encodeComponent(jsonEncode(filters));
+    final token = UserSession().token ?? '';
+    return '$baseUrl/reports/generate/pdf?token=$token&reportType=Device%20History&filters=$filterStr';
+  }
+
+  static String getDeviceHistoryExcelUrl({String? startDate, String? endDate, List<String>? devices}) {
+    final filters = <String, dynamic>{};
+    if (startDate != null) filters['fromDate'] = startDate;
+    if (endDate != null) filters['toDate'] = endDate;
+    if (devices != null && devices.isNotEmpty) filters['deviceCodes'] = devices;
+    
+    final filterStr = Uri.encodeComponent(jsonEncode(filters));
+    final token = UserSession().token ?? '';
+    return '$baseUrl/reports/generate/excel?token=$token&reportType=Device%20History&filters=$filterStr';
   }
 
   // SESSIONS

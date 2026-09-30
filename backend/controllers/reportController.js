@@ -45,11 +45,60 @@ async function getReportData(reportType, filters, user) {
     const devices = await db.query(query, params);
     tableData.rows = devices.rows.map(d => [d.device_code, d.device_type, d.battery_level || '--', d.condition_status, d.network_status]);
     
+  } else if (reportType === 'Device History') {
+    tableData.headers = ['Device', 'Issued To', 'Issued At', 'Returned At', 'Remarks'];
+    
+    let query = `
+      SELECT 
+        COALESCE(d.device_code, dr.device_id) as device_code, 
+        u.full_name, u.employee_id,
+        da.issued_at + interval '5 hours 30 minutes' as issued_at, 
+        da.returned_at + interval '5 hours 30 minutes' as returned_at, 
+        da.remarks
+      FROM device_assignments da
+      LEFT JOIN devices d ON da.device_id = d.id
+      LEFT JOIN device_registry dr ON d.device_code = dr.device_id OR d.id = dr.id
+      LEFT JOIN users u ON da.employee_id = u.id
+      WHERE 1=1
+    `;
+    let params = [];
+    
+    if (user.role === 'yard_admin') {
+       params.push(user.id);
+       query += ` AND (COALESCE(d.yard_id, dr.yard_id) IN (SELECT yard_id FROM user_yard_assignments WHERE user_id = $${params.length}) OR COALESCE(d.yard_id, dr.yard_id) IS NULL) `;
+    }
+    
+    if (filters && filters.fromDate && filters.toDate) {
+       params.push(filters.fromDate);
+       params.push(filters.toDate);
+       query += ` AND da.issued_at >= $${params.length - 1} AND da.issued_at <= $${params.length}::timestamp + interval '1 day' - interval '1 second'`;
+    }
+
+    if (filters && filters.deviceCodes && filters.deviceCodes.length > 0) {
+       const placeholders = filters.deviceCodes.map((_, i) => `$${params.length + i + 1}`).join(',');
+       query += ` AND COALESCE(d.device_code, dr.device_id) IN (${placeholders})`;
+       params.push(...filters.deviceCodes);
+    }
+    
+    query += ` ORDER BY da.issued_at DESC LIMIT 500`;
+    
+    const history = await db.query(query, params);
+    tableData.rows = history.rows.map(h => [
+      h.device_code || 'Unknown',
+      `${h.full_name} (${h.employee_id})`,
+      new Date(h.issued_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+      h.returned_at ? new Date(h.returned_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Active',
+      h.remarks || '--'
+    ]);
   } else {
     // Sessions
     tableData.headers = ['Date', 'Device', 'Employee', 'Status'];
     let query = `
-      SELECT da.issued_at, d.device_code, u.full_name, da.returned_at
+      SELECT 
+        da.issued_at + interval '5 hours 30 minutes' as issued_at, 
+        d.device_code, 
+        u.full_name, 
+        da.returned_at + interval '5 hours 30 minutes' as returned_at
       FROM device_assignments da
       JOIN devices d ON da.device_id = d.id
       JOIN users u ON da.employee_id = u.id
@@ -90,7 +139,7 @@ async function getReportData(reportType, filters, user) {
     
     const sessions = await db.query(query, params);
     tableData.rows = sessions.rows.map(s => [
-      new Date(s.issued_at).toLocaleDateString(), 
+      new Date(s.issued_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }), 
       s.device_code, 
       s.full_name, 
       s.returned_at ? 'Finished' : 'Active'
@@ -159,17 +208,27 @@ exports.generatePDF = async (req, res) => {
     doc.y = 105;
     
     doc.fillColor('black').fontSize(14).font('Helvetica-Bold').text(`Report Type: ${reportType || 'Standard'}`, 40, doc.y, { align: 'left' });
-    doc.fontSize(10).font('Helvetica').text(`Generated On: ${new Date().toLocaleString()}`, { align: 'left' });
+    doc.fontSize(10).font('Helvetica').text(`Generated On: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`, { align: 'left' });
     doc.moveDown();
 
     doc.fontSize(12).text('Applied Filters:', { underline: true });
     doc.fontSize(10);
+    
+    let hasFilters = false;
+    if (filters && filters.fromDate && filters.toDate) {
+       doc.text(`Date Range: ${new Date(filters.fromDate).toLocaleDateString()} to ${new Date(filters.toDate).toLocaleDateString()}`);
+       hasFilters = true;
+    }
+    
     // Only print display strings, skip internal IDs
     for (const [key, value] of Object.entries(filters || {})) {
        if (!key.endsWith('Id') && key !== 'fromDate' && key !== 'toDate') {
-          doc.text(`${key}: ${value}`);
+          const displayKey = key === 'deviceCodes' ? 'Devices' : key.charAt(0).toUpperCase() + key.slice(1);
+          doc.text(`${displayKey}: ${value}`);
+          hasFilters = true;
        }
     }
+    if (!hasFilters) doc.text('None');
     doc.moveDown(2);
 
     const tableData = await getReportData(reportType, filters, req.user);
@@ -204,15 +263,24 @@ exports.generateExcel = async (req, res) => {
 
     sheet.addRow(['SafeShunt - Reports & Audits']);
     sheet.addRow([`Report Type: ${safeReportType}`]);
-    sheet.addRow([`Generated On: ${new Date().toLocaleString()}`]);
+    sheet.addRow([`Generated On: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`]);
     sheet.addRow([]);
 
     sheet.addRow(['Applied Filters:']);
+    let hasExcelFilters = false;
+    if (filters && filters.fromDate && filters.toDate) {
+       sheet.addRow(['Date Range', `${new Date(filters.fromDate).toLocaleDateString()} to ${new Date(filters.toDate).toLocaleDateString()}`]);
+       hasExcelFilters = true;
+    }
+    
     for (const [key, value] of Object.entries(filters || {})) {
        if (!key.endsWith('Id') && key !== 'fromDate' && key !== 'toDate') {
-          sheet.addRow([key, value]);
+          const displayKey = key === 'deviceCodes' ? 'Devices' : key.charAt(0).toUpperCase() + key.slice(1);
+          sheet.addRow([displayKey, value]);
+          hasExcelFilters = true;
        }
     }
+    if (!hasExcelFilters) sheet.addRow(['None']);
     sheet.addRow([]);
 
     const tableData = await getReportData(reportType, filters, req.user);

@@ -152,11 +152,41 @@ const removeYardAssignment = async (req, res) => {
   }
 };
 
+// @desc    Delete a yard (cascades to lines)
+// @route   DELETE /api/yards/:yardId
+// @access  Super Admin
+const deleteYard = async (req, res) => {
+  try {
+    const { yardId } = req.params;
+    await db.query('DELETE FROM yards WHERE id = $1', [yardId]);
+    res.status(200).json({ message: 'Yard deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting yard:', error);
+    res.status(500).json({ message: 'Server error deleting yard' });
+  }
+};
+
+// @desc    Delete a yard line
+// @route   DELETE /api/yards/:yardId/lines/:lineId
+// @access  Super Admin
+const deleteYardLine = async (req, res) => {
+  try {
+    const { lineId } = req.params;
+    await db.query('DELETE FROM yard_lines WHERE id = $1', [lineId]);
+    res.status(200).json({ message: 'Yard line deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting yard line:', error);
+    res.status(500).json({ message: 'Server error deleting yard line' });
+  }
+};
+
 module.exports = {
   createYard,
   getYards,
   addYardLine,
   getYardLines,
   assignYardToUser,
-  removeYardAssignment
+  removeYardAssignment,
+  deleteYard,
+  deleteYardLine
 };

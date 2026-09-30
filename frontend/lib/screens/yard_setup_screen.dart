@@ -14,6 +14,7 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
   bool _isLoading = true;
   List<dynamic> _yards = [];
   List<dynamic> _unassignedDeadEnds = [];
+  List<dynamic> _allDevices = [];
 
   @override
   void initState() {
@@ -35,8 +36,8 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
       }
       
       if (devicesResult['success']) {
-        final allDevices = devicesResult['data'] as List<dynamic>;
-        _unassignedDeadEnds = allDevices.where((d) {
+        _allDevices = devicesResult['data'] as List<dynamic>;
+        _unassignedDeadEnds = _allDevices.where((d) {
           final type = (d['device_type'] ?? d['product_type'] ?? '').toString().toUpperCase();
           final pType = (d['product_type'] ?? '').toString().toUpperCase();
           final code = (d['device_code'] ?? d['device_id'] ?? '').toString().toUpperCase();
@@ -133,11 +134,21 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('CONFIGURED LINES', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.subtitleColor, letterSpacing: 1.0)),
-                        TextButton.icon(
-                          onPressed: () => _showLineForm(yard['id'].toString()),
-                          icon: const Icon(Icons.add, size: 16),
-                          label: const Text('Add Line'),
-                          style: TextButton.styleFrom(foregroundColor: Colors.blueAccent),
+                        Row(
+                          children: [
+                            TextButton.icon(
+                              onPressed: () => _showDeleteYardDialog(yard),
+                              icon: const Icon(Icons.delete_outline, size: 16),
+                              label: const Text('Delete Yard'),
+                              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => _showLineForm(yard['id'].toString()),
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Add Line'),
+                              style: TextButton.styleFrom(foregroundColor: Colors.blueAccent),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -253,16 +264,168 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                   ),
                 ],
               ),
-              IconButton(
-                icon: const Icon(Icons.edit_note, size: 20, color: AppTheme.subtitleColor),
-                onPressed: () => _showAssignForm(line),
-                tooltip: 'Edit Assignment',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                    onPressed: () => _showDeleteLineDialog(line),
+                    tooltip: 'Delete Line',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                  const SizedBox(width: 16),
+                  if (hasDevice)
+                    InkWell(
+                      onTap: () => _handleUnassign(line),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                        child: Text('UNASSIGN', style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => _showAssignForm(line),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(hasDevice ? 'REPLACE' : 'ASSIGN', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  void _handleUnassign(dynamic line) {
+    final String assignedCode = line['assigned_de'];
+    final dev = _allDevices.firstWhere((d) => d['device_code'] == assignedCode, orElse: () => null);
+    if (dev == null) return;
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Assignment?'),
+        content: Text("Are you sure you want to unassign $assignedCode from ${line['line_name']}?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              
+              showDialog(
+                context: context, barrierDismissible: false,
+                builder: (context) => const Center(child: CircularProgressIndicator())
+              );
+              
+              final result = await ApiService.assignDeviceToLine(dev['id'].toString(), null);
+              
+              if (mounted) {
+                 Navigator.pop(context); // close loading
+                 if (result['success']) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Device Unassigned successfully!')));
+                    _fetchData();
+                 } else {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message'])));
+                 }
+              }
+            },
+            child: const Text('UNASSIGN', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteYardDialog(dynamic yard) {
+    String typedName = '';
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) {
+          return AlertDialog(
+            title: const Text('Delete Yard?', style: TextStyle(color: Colors.redAccent)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("This will permanently delete the yard '${yard['yard_name']}' and ALL of its configured lines. This action cannot be undone.", style: const TextStyle(color: AppTheme.subtitleColor)),
+                const SizedBox(height: 16),
+                Text("Please type '${yard['yard_name']}' to confirm:"),
+                const SizedBox(height: 8),
+                TextField(
+                  onChanged: (val) => setDialogState(() => typedName = val),
+                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+              TextButton(
+                onPressed: (typedName != yard['yard_name'] || isSubmitting) ? null : () async {
+                  setDialogState(() => isSubmitting = true);
+                  final result = await ApiService.deleteYard(yard['id'].toString());
+                  if (mounted) {
+                    Navigator.pop(ctx);
+                    if (result['success']) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Yard deleted successfully!')));
+                      _fetchData();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message'])));
+                    }
+                  }
+                },
+                child: isSubmitting 
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) 
+                  : const Text('DELETE YARD', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          );
+        }
+      ),
+    );
+  }
+
+  void _showDeleteLineDialog(dynamic line) {
+    bool isSubmitting = false;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) {
+          return AlertDialog(
+            title: const Text('Delete Line?', style: TextStyle(color: Colors.redAccent)),
+            content: Text("Are you sure you want to delete the line '${line['line_name']}'?"),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+              TextButton(
+                onPressed: isSubmitting ? null : () async {
+                  setDialogState(() => isSubmitting = true);
+                  final result = await ApiService.deleteYardLine(line['yard_id'].toString(), line['id'].toString());
+                  if (mounted) {
+                    Navigator.pop(ctx);
+                    if (result['success']) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Line deleted successfully!')));
+                      _fetchData();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message'])));
+                    }
+                  }
+                },
+                child: isSubmitting 
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) 
+                  : const Text('DELETE', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          );
+        }
       ),
     );
   }

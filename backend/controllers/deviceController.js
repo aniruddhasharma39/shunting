@@ -143,7 +143,7 @@ const getDevices = async (req, res) => {
       LEFT JOIN yard_lines yl ON COALESCE(d.assigned_line_id, dr.assigned_line_id) = yl.id
       LEFT JOIN yards y ON COALESCE(d.yard_id, dr.yard_id, yl.yard_id) = y.id
       LEFT JOIN (
-        SELECT * FROM device_assignments WHERE returned_at IS NULL
+        SELECT DISTINCT ON (device_id) * FROM device_assignments WHERE returned_at IS NULL ORDER BY device_id, issued_at DESC
       ) active_da ON d.id = active_da.device_id OR dr.id = active_da.device_id
       LEFT JOIN users active_u ON active_da.employee_id = active_u.id
       WHERE 1=1
@@ -226,6 +226,15 @@ const issueDevice = async (req, res) => {
     );
     if (devCheck.rows[0]?.is_disabled === true) {
       return res.status(400).json({ message: 'Device is disabled and cannot be issued' });
+    }
+
+    // Ensure device is not already issued
+    const issueCheck = await db.query(
+      `SELECT id FROM device_assignments WHERE device_id = $1 AND returned_at IS NULL`,
+      [device_id]
+    );
+    if (issueCheck.rows.length > 0) {
+      return res.status(400).json({ message: 'Device is already issued. Please return it first.' });
     }
 
     // Insert assignment
@@ -379,11 +388,74 @@ const toggleDeviceDisabled = async (req, res) => {
   }
 };
 
+// @desc    Get device assignment history (Issue/Return Logs)
+// @route   GET /api/devices/assignments
+// @access  Yard Admin / Super Admin
+const getDeviceAssignments = async (req, res) => {
+  try {
+    let query = `
+      SELECT 
+        da.id,
+        da.device_id,
+        COALESCE(d.device_code, dr.device_id) as device_code,
+        COALESCE(d.device_type, dr.product_type) as device_type,
+        da.employee_id,
+        u.full_name as employee_name,
+        u.employee_id as employee_code,
+        da.issued_at + interval '5 hours 30 minutes' as issued_at,
+        da.returned_at + interval '5 hours 30 minutes' as returned_at,
+        da.condition_at_issue,
+        da.condition_at_return,
+        da.fault_reported,
+        da.remarks
+      FROM device_assignments da
+      LEFT JOIN devices d ON da.device_id = d.id
+      LEFT JOIN device_registry dr ON d.device_code = dr.device_id OR d.id = dr.id
+      LEFT JOIN users u ON da.employee_id = u.id
+      WHERE 1=1
+    `;
+    
+    const params = [];
+    const { startDate, endDate, devices } = req.query;
+
+    if (startDate && endDate) {
+      params.push(startDate);
+      params.push(endDate);
+      query += ` AND da.issued_at >= $${params.length - 1} AND da.issued_at <= $${params.length}::timestamp + interval '1 day' - interval '1 second'`;
+    }
+
+    if (devices) {
+      const deviceList = devices.split(',').map(d => d.trim());
+      const placeholders = deviceList.map((_, i) => `$${params.length + i + 1}`).join(',');
+      query += ` AND COALESCE(d.device_code, dr.device_id) IN (${placeholders})`;
+      params.push(...deviceList);
+    }
+    
+    // Add yard admin filter if needed
+    if (req.user && req.user.role === 'yard_admin') {
+      params.push(req.user.id);
+      query += ` AND (
+        COALESCE(d.yard_id, dr.yard_id) IN (SELECT yard_id FROM user_yard_assignments WHERE user_id = $${params.length})
+        OR COALESCE(d.yard_id, dr.yard_id) IS NULL
+      )`;
+    }
+
+    query += ' ORDER BY da.issued_at DESC LIMIT 500';
+
+    const result = await db.query(query, params);
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error fetching device assignments:', error);
+    res.status(500).json({ success: false, message: 'Server error fetching assignments' });
+  }
+};
+
 module.exports = {
   registerDevice,
   getDevices,
   issueDevice,
   returnDevice,
   assignLine,
-  toggleDeviceDisabled
+  toggleDeviceDisabled,
+  getDeviceAssignments
 };

@@ -3,7 +3,7 @@ import '../theme/app_theme.dart';
 import '../services/user_session.dart';
 import '../screens/yard_setup_screen.dart';
 import '../screens/device_inventory_screen.dart';
-import '../screens/de_assignment_screen.dart';
+
 import '../screens/issue_return_screen.dart';
 import '../screens/user_management_screen.dart';
 import '../screens/profile_screen.dart';
@@ -143,15 +143,6 @@ class AppDrawer extends StatelessWidget {
               icon: Icons.account_tree_outlined,
               title: 'Yard & Line Setup',
               destination: const YardSetupScreen(),
-            ),
-
-          // DE Line Assignments - Super Admin and Yard Admin
-          if (session.isSuperAdmin || session.isYardAdmin)
-            _buildDrawerItem(
-              context: context,
-              icon: Icons.linear_scale,
-              title: 'DE Line Assignments',
-              destination: const DEAssignmentScreen(),
             ),
 
           // Issue & Return - Super Admin and Yard Admin

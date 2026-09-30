@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_drawer.dart';
 import '../services/api_service.dart';
+import 'device_issue_history_screen.dart';
 
 class IssueReturnScreen extends StatefulWidget {
   const IssueReturnScreen({super.key});
@@ -27,32 +28,36 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
 
     final devicesResult = await ApiService.fetchDevices();
     final usersResult = await ApiService.fetchUsers();
-    final sessionsResult = await ApiService.fetchSessions(status: 'live');
 
     if (mounted) {
       if (devicesResult['success']) {
         final allDevices = devicesResult['data'] as List<dynamic>;
-        // Filter for Receivers / Loco Units
+        
+        // Populate active sessions from issued devices directly!
+        // This fixes the bug where devices without telemetry were hidden.
+        _activeSessions = allDevices.where((d) => d['is_issued'] == true).map((d) {
+          return {
+            'id': d['active_assignment_id'],
+            'ldDevice': d['device_code'] ?? d['device_id'],
+            'holder': d['active_holder_name'] ?? d['active_holder_employee_id'] ?? 'Unknown Employee',
+            'startTime': d['active_issued_at'],
+          };
+        }).toList();
+
+        // Filter for available Receivers / Loco Units
         _availableLDs = allDevices.where((d) {
           final type = (d['device_type'] ?? d['product_type'] ?? '').toString().toUpperCase();
           final pType = (d['product_type'] ?? '').toString().toUpperCase();
           final code = (d['device_code'] ?? d['device_id'] ?? '').toString().toUpperCase();
           final isReceiver = type.contains('RECEIVER') || type.contains('LOCO') || pType.contains('RECEIVER') || code.startsWith('RX') || code.startsWith('LD') || code.contains('RECEIVER');
-          return isReceiver;
+          
+          return isReceiver && d['is_issued'] != true;
         }).toList();
       }
       
       if (usersResult['success']) {
         final allUsers = usersResult['data'] as List<dynamic>;
         _locoPilots = allUsers.where((u) => u['role'] == 'viewer' || u['role'] == 'yard_admin' || u['role'] == 'maintenance_user' || u['role'] == 'hardware_engineer').toList();
-      }
-
-      if (sessionsResult['success']) {
-        _activeSessions = sessionsResult['data'] as List<dynamic>;
-        
-        // Filter out available LDs that are already in active sessions
-        final activeLDCodes = _activeSessions.map((s) => s['ldDevice']?.toString()).where((c) => c != null).toSet();
-        _availableLDs.removeWhere((d) => activeLDCodes.contains(d['device_code']?.toString()) || activeLDCodes.contains(d['device_id']?.toString()));
       }
 
       setState(() => _isLoading = false);
@@ -89,6 +94,13 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
             ],
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.history),
+              tooltip: 'Issue/Return History',
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const DeviceIssueHistoryScreen()));
+              },
+            ),
             IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchData)
           ],
         ),

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { registerDevice, getDevices, issueDevice, returnDevice, assignLine, toggleDeviceDisabled } = require('../controllers/deviceController');
+const { registerDevice, getDevices, issueDevice, returnDevice, assignLine, toggleDeviceDisabled, getDeviceAssignments } = require('../controllers/deviceController');
 const { verifyToken: protect, requireRole } = require('../middleware/authMiddleware');
 
 router.route('/')
@@ -9,6 +9,7 @@ router.route('/')
 
 router.post('/issue', protect, issueDevice);
 router.post('/return', protect, returnDevice);
+router.get('/assignments', protect, getDeviceAssignments);
 router.put('/:id/assign-line', protect, assignLine);
 router.put('/:id/toggle-disabled', protect, requireRole('super_admin', 'hardware_engineer', 'yard_admin'), toggleDeviceDisabled);
 
