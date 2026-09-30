@@ -636,7 +636,7 @@ exports.generateSessionExcel = async (req, res) => {
 
 exports.generateRangeReportPDF = async (req, res) => {
   try {
-    const { from_date, to_date } = req.query;
+    const { from_date, to_date, yard, pilot, device, dur_op, dur_val, sort_by, sort_asc } = req.query;
 
     if (!from_date || !to_date) {
       return res.status(400).json({ error: 'from_date and to_date are required' });
@@ -649,7 +649,7 @@ exports.generateRangeReportPDF = async (req, res) => {
     `);
     const knownDeviceIds = new Set(knownDevicesRes.rows.map(r => r.device_id));
 
-    const sessionsQuery = `
+    let sessionsQuery = `
       SELECT 
         ss.id,
         COALESCE(ss.session_code, ss.session_number, ('SES-' || SUBSTRING(ss.id::text, 1, 8))) as session_code,
@@ -668,10 +668,40 @@ exports.generateRangeReportPDF = async (req, res) => {
       LEFT JOIN yards y ON ss.yard_id = y.id
       WHERE COALESCE(ss.start_time, ss.session_start, ss.created_at) >= $1::timestamptz
         AND COALESCE(ss.start_time, ss.session_start, ss.created_at) <= $2::timestamptz + INTERVAL '1 day' - INTERVAL '1 second'
-      ORDER BY COALESCE(ss.start_time, ss.session_start, ss.created_at) ASC
-      LIMIT 500
     `;
-    const ssRes = await db.query(sessionsQuery, [from_date, to_date]);
+    
+    let params = [from_date, to_date];
+    
+    if (yard && yard !== 'null') {
+      params.push(yard);
+      sessionsQuery += ` AND y.yard_name = $${params.length}`;
+    }
+    if (pilot && pilot !== 'null') {
+      params.push(pilot);
+      sessionsQuery += ` AND ss.employee_name = $${params.length}`;
+    }
+    if (device && device.trim() !== '') {
+      params.push(`%${device}%`);
+      sessionsQuery += ` AND (COALESCE(ss.ld_code, ss.rx_device_id) ILIKE $${params.length} OR COALESCE(ss.de_code, ss.tx_device_id) ILIKE $${params.length})`;
+    }
+    if (dur_op && dur_val && dur_val > 0) {
+       let op = dur_op;
+       if (op === '=') {
+          sessionsQuery += ` AND ABS(EXTRACT(EPOCH FROM (COALESCE(ss.end_time, ss.session_end) - COALESCE(ss.start_time, ss.session_start, ss.created_at))) / 60 - ${parseFloat(dur_val)}) <= 5`;
+       } else {
+          sessionsQuery += ` AND EXTRACT(EPOCH FROM (COALESCE(ss.end_time, ss.session_end) - COALESCE(ss.start_time, ss.session_start, ss.created_at))) / 60 ${op} ${parseFloat(dur_val)}`;
+       }
+    }
+
+    let sortCol = "COALESCE(ss.start_time, ss.session_start, ss.created_at)";
+    if (sort_by === 'Session End') {
+       sortCol = "COALESCE(ss.end_time, ss.session_end)";
+    }
+    let sortDir = (sort_asc === 'true') ? "ASC" : "DESC";
+
+    sessionsQuery += ` ORDER BY ${sortCol} ${sortDir} LIMIT 500`;
+
+    const ssRes = await db.query(sessionsQuery, params);
 
     const sessions = ssRes.rows.filter(s => {
       if (!s.ld_device) return false;

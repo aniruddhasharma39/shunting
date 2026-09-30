@@ -22,7 +22,20 @@ class _SessionsScreenState extends State<SessionsScreen> {
   Timer? _liveRefreshTimer;
 
   List<dynamic> _liveSessions = [];
+
   List<dynamic> _historySessions = [];
+  List<dynamic> _filteredHistorySessions = [];
+
+  // Filter State
+  DateTimeRange? _filterDateRange;
+  String _sortBy = 'Session Start'; // 'Session Start', 'Session End'
+  bool _sortAscending = false;
+  String? _filterYard;
+  String? _filterPilot;
+  String _filterDeviceId = '';
+  double _filterDurationValue = 0; // minutes
+  String _filterDurationOperator = '>'; // '>', '<', '='
+
 
   @override
   void initState() {
@@ -46,6 +59,78 @@ class _SessionsScreenState extends State<SessionsScreen> {
         }
       });
     }
+  }
+
+
+  void _applyFilters() {
+    List<dynamic> filtered = List.from(_historySessions);
+
+    if (_filterDateRange != null) {
+      filtered = filtered.where((s) {
+        try {
+          final st = DateTime.parse(s['startTime'] ?? s['created_at'] ?? '').toLocal();
+          return st.isAfter(_filterDateRange!.start) && st.isBefore(_filterDateRange!.end.add(const Duration(days: 1)));
+        } catch (_) { return false; }
+      }).toList();
+    }
+
+    if (_filterYard != null && _filterYard!.isNotEmpty) {
+      filtered = filtered.where((s) => (s['yard'] ?? s['yard_name']) == _filterYard).toList();
+    }
+    
+    if (_filterPilot != null && _filterPilot!.isNotEmpty) {
+      filtered = filtered.where((s) => (s['holder'] ?? s['employee_name']) == _filterPilot).toList();
+    }
+
+    if (_filterDeviceId.isNotEmpty) {
+      final search = _filterDeviceId.toLowerCase();
+      filtered = filtered.where((s) {
+        final rx = (s['ldDevice'] ?? s['rx_device_id'] ?? '').toString().toLowerCase();
+        final tx = (s['deDevice'] ?? s['tx_device_id'] ?? '').toString().toLowerCase();
+        return rx.contains(search) || tx.contains(search);
+      }).toList();
+    }
+
+    if (_filterDurationValue > 0) {
+      filtered = filtered.where((s) {
+        double durationMins = 0;
+        if (s['startTime'] != null && s['endTime'] != null) {
+          try {
+            final st = DateTime.parse(s['startTime']);
+            final et = DateTime.parse(s['endTime']);
+            durationMins = et.difference(st).inMinutes.toDouble();
+          } catch (_) {}
+        } else if (s['duration'] != null) {
+           final durStr = s['duration'].toString();
+           final hMatch = RegExp(r'(\d+)h').firstMatch(durStr);
+           if (hMatch != null) durationMins += int.parse(hMatch.group(1)!) * 60;
+           final mMatch = RegExp(r'(\d+)m').firstMatch(durStr);
+           if (mMatch != null) durationMins += int.parse(mMatch.group(1)!);
+        }
+
+        if (_filterDurationOperator == '>') return durationMins > _filterDurationValue;
+        if (_filterDurationOperator == '<') return durationMins < _filterDurationValue;
+        if (_filterDurationOperator == '=') return (durationMins - _filterDurationValue).abs() <= 5;
+        return true;
+      }).toList();
+    }
+
+    filtered.sort((a, b) {
+      DateTime timeA;
+      DateTime timeB;
+      if (_sortBy == 'Session End') {
+        timeA = DateTime.tryParse(a['endTime'] ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+        timeB = DateTime.tryParse(b['endTime'] ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      } else {
+        timeA = DateTime.tryParse(a['startTime'] ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+        timeB = DateTime.tryParse(b['startTime'] ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      }
+      return _sortAscending ? timeA.compareTo(timeB) : timeB.compareTo(timeA);
+    });
+
+    setState(() {
+      _filteredHistorySessions = filtered;
+    });
   }
 
   Future<void> _fetchData() async {
@@ -92,6 +177,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
             _historySessions = newHistory;
             _isLoadingHistory = false;
           });
+          _applyFilters();
         }
       } else {
         if (_isLoadingHistory) {
@@ -572,222 +658,274 @@ class _SessionsScreenState extends State<SessionsScreen> {
   // 2. SESSION HISTORY TAB
   // ==========================================
   Widget _buildHistoryTab() {
-    return ListView.builder(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(12.0),
-      itemCount: _historySessions.isEmpty ? 2 : _historySessions.length + 1,
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1E3A5F), Color(0xFF0F2340)],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.4)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.picture_as_pdf, color: Color(0xFF60A5FA), size: 20),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Duration-Wise Bulk Report', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                      Text('Download Indian Railways PDF for a date range', style: TextStyle(color: Colors.white54, fontSize: 10)),
-                    ],
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+          child: _buildFilterBar(),
+        ),
+        Expanded(
+          child: _filteredHistorySessions.isEmpty
+              ? const Center(
+                  child: Text(
+                    'No past shunting sessions found matching the criteria.',
+                    style: TextStyle(color: Colors.white38),
                   ),
+                )
+              : ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  itemCount: _filteredHistorySessions.length,
+                  itemBuilder: (context, index) {
+                    return _buildHistorySessionItem(_filteredHistorySessions[index]);
+                  },
                 ),
-                ElevatedButton.icon(
-                  onPressed: _showRangeReportDialog,
-                  icon: const Icon(Icons.download, size: 14, color: Colors.white),
-                  label: const Text('Download', style: TextStyle(fontSize: 11, color: Colors.white)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    elevation: 0,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        if (_historySessions.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.only(top: 100),
-            child: Center(
-              child: Text(
-                'No past shunting sessions recorded yet.',
-                style: TextStyle(color: Colors.white38),
-              ),
-            ),
-          );
-        }
-
-        return _buildHistorySessionItem(_historySessions[index - 1]);
-      },
+        ),
+      ],
     );
   }
 
-  Future<void> _showRangeReportDialog() async {
-    DateTime? fromDate;
-    DateTime? toDate;
+  Widget _buildFilterBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Date Range
+          Expanded(
+            child: InkWell(
+              onTap: () async {
+                final picked = await showDateRangePicker(
+                  context: context,
+                  firstDate: DateTime(2024),
+                  lastDate: DateTime.now(),
+                  initialDateRange: _filterDateRange,
+                  builder: (context, child) => Theme(
+                    data: ThemeData.dark().copyWith(
+                      colorScheme: const ColorScheme.dark(
+                        primary: Colors.cyanAccent,
+                        onPrimary: Colors.black,
+                        surface: Color(0xFF1E293B),
+                      ),
+                    ),
+                    child: child!,
+                  ),
+                );
+                if (picked != null) {
+                  setState(() => _filterDateRange = picked);
+                  _applyFilters();
+                }
+              },
+              child: Row(
+                children: [
+                  const Icon(Icons.date_range, color: Colors.cyanAccent, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _filterDateRange == null
+                          ? 'Select Date Range'
+                          : '${_filterDateRange!.start.day}/${_filterDateRange!.start.month} - ${_filterDateRange!.end.day}/${_filterDateRange!.end.month}',
+                      style: TextStyle(color: _filterDateRange == null ? Colors.white54 : Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (_filterDateRange != null)
+                    GestureDetector(
+                      onTap: () {
+                        setState(() => _filterDateRange = null);
+                        _applyFilters();
+                      },
+                      child: const Icon(Icons.clear, size: 16, color: Colors.white54),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          // Actions
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.filter_list, size: 22, color: Colors.white),
+                onPressed: _showAdvancedFilterSheet,
+                tooltip: 'Advanced Filters & Sorting',
+              ),
+              IconButton(
+                icon: const Icon(Icons.picture_as_pdf, size: 22, color: Colors.redAccent),
+                onPressed: () => _downloadFilteredReport(isExcel: false),
+                tooltip: 'Download Filtered PDF',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
-    await showDialog(
+  void _showAdvancedFilterSheet() {
+    final yards = _historySessions.map((s) => (s['yard'] ?? s['yard_name'])?.toString()).where((s) => s != null && s.isNotEmpty).toSet().toList();
+    final pilots = _historySessions.map((s) => (s['holder'] ?? s['employee_name'])?.toString()).where((s) => s != null && s.isNotEmpty).toSet().toList();
+
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) {
         return StatefulBuilder(
-          builder: (ctx, setDlgState) {
-            String fromLabel = fromDate != null
-              ? '${fromDate!.day.toString().padLeft(2,'0')}/${fromDate!.month.toString().padLeft(2,'0')}/${fromDate!.year}'
-              : 'Pick start date';
-            String toLabel = toDate != null
-              ? '${toDate!.day.toString().padLeft(2,'0')}/${toDate!.month.toString().padLeft(2,'0')}/${toDate!.year}'
-              : 'Pick end date';
-
-            return Dialog(
-              backgroundColor: const Color(0xFF0F172A),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-                side: const BorderSide(color: Colors.blueAccent),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(22),
+          builder: (ctx, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 20, right: 20, top: 20),
+              child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.picture_as_pdf, color: Colors.redAccent, size: 22),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Indian Railways — Range Report',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Generate a comprehensive PDF with Indian Railways branding for all sessions in a date range.',
-                      style: TextStyle(color: Colors.white60, fontSize: 11, height: 1.5),
-                    ),
-                    const SizedBox(height: 18),
-                    // From Date
-                    GestureDetector(
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: ctx,
-                          initialDate: DateTime.now().subtract(const Duration(days: 1)),
-                          firstDate: DateTime(2024),
-                          lastDate: DateTime.now(),
-                          helpText: 'Select Start Date',
-                          builder: (c, child) => Theme(
-                            data: ThemeData.dark().copyWith(
-                              colorScheme: const ColorScheme.dark(
-                                primary: Colors.cyanAccent,
-                                onPrimary: Colors.black,
-                              ),
-                            ),
-                            child: child!,
-                          ),
-                        );
-                        if (picked != null) setDlgState(() => fromDate = picked);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: fromDate != null ? Colors.cyanAccent : Colors.white24),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.calendar_today, size: 16, color: fromDate != null ? Colors.cyanAccent : Colors.white38),
-                            const SizedBox(width: 10),
-                            Text('From: $fromLabel', style: TextStyle(color: fromDate != null ? Colors.white : Colors.white38, fontSize: 13)),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    // To Date
-                    GestureDetector(
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: ctx,
-                          initialDate: DateTime.now(),
-                          firstDate: fromDate ?? DateTime(2024),
-                          lastDate: DateTime.now(),
-                          helpText: 'Select End Date',
-                          builder: (c, child) => Theme(
-                            data: ThemeData.dark().copyWith(
-                              colorScheme: const ColorScheme.dark(
-                                primary: Colors.cyanAccent,
-                                onPrimary: Colors.black,
-                              ),
-                            ),
-                            child: child!,
-                          ),
-                        );
-                        if (picked != null) setDlgState(() => toDate = picked);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: toDate != null ? Colors.cyanAccent : Colors.white24),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.calendar_today, size: 16, color: toDate != null ? Colors.cyanAccent : Colors.white38),
-                            const SizedBox(width: 10),
-                            Text('To: $toLabel', style: TextStyle(color: toDate != null ? Colors.white : Colors.white38, fontSize: 13)),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 22),
+                    const Text('Advanced Filters & Sorting', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Divider(color: Colors.white24, height: 30),
+                    
+                    // Sort By
+                    const Text('Sort By', style: TextStyle(color: Colors.cyanAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.white24),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          child: DropdownButtonFormField<String>(
+                            value: _sortBy,
+                            dropdownColor: const Color(0xFF1E293B),
+                            style: const TextStyle(color: Colors.white, fontSize: 13),
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              filled: true,
+                              fillColor: const Color(0xFF1E293B),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                             ),
-                            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+                            items: ['Session Start', 'Session End'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                            onChanged: (v) => setSheetState(() => _sortBy = v!),
                           ),
                         ),
                         const SizedBox(width: 10),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: fromDate != null && toDate != null
-                              ? () {
-                                  Navigator.pop(ctx);
-                                  _downloadRangeReport(fromDate!, toDate!);
-                                }
-                              : null,
-                            icon: const Icon(Icons.download, size: 16, color: Colors.white),
-                            label: const Text('Download PDF', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF003580),
-                              disabledBackgroundColor: Colors.white12,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
+                        InkWell(
+                          onTap: () => setSheetState(() => _sortAscending = !_sortAscending),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(8)),
+                            child: Icon(_sortAscending ? Icons.arrow_upward : Icons.arrow_downward, color: Colors.cyanAccent, size: 20),
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 20),
+
+                    // Yard & Pilot
+                    const Text('Attributes', style: TextStyle(color: Colors.cyanAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String?>(
+                      value: _filterYard,
+                      dropdownColor: const Color(0xFF1E293B),
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      decoration: InputDecoration(
+                        labelText: 'Yard',
+                        labelStyle: const TextStyle(color: Colors.white54),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        filled: true,
+                        fillColor: const Color(0xFF1E293B),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(value: null, child: Text('All Yards')),
+                        ...yards.map((s) => DropdownMenuItem(value: s, child: Text(s!))),
+                      ],
+                      onChanged: (v) => setSheetState(() => _filterYard = v),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String?>(
+                      value: _filterPilot,
+                      dropdownColor: const Color(0xFF1E293B),
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      decoration: InputDecoration(
+                        labelText: 'Loco Pilot',
+                        labelStyle: const TextStyle(color: Colors.white54),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        filled: true,
+                        fillColor: const Color(0xFF1E293B),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(value: null, child: Text('All Pilots')),
+                        ...pilots.map((s) => DropdownMenuItem(value: s, child: Text(s!))),
+                      ],
+                      onChanged: (v) => setSheetState(() => _filterPilot = v),
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      initialValue: _filterDeviceId,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      decoration: InputDecoration(
+                        labelText: 'Device ID (e.g. RX-01)',
+                        labelStyle: const TextStyle(color: Colors.white54),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        filled: true,
+                        fillColor: const Color(0xFF1E293B),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                      ),
+                      onChanged: (v) => setSheetState(() => _filterDeviceId = v),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Duration
+                    const Text('Duration (Minutes)', style: TextStyle(color: Colors.cyanAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        DropdownButton<String>(
+                          value: _filterDurationOperator,
+                          dropdownColor: const Color(0xFF1E293B),
+                          style: const TextStyle(color: Colors.cyanAccent, fontSize: 16, fontWeight: FontWeight.bold),
+                          underline: const SizedBox(),
+                          items: ['>', '<', '='].map((op) => DropdownMenuItem(value: op, child: Text(op))).toList(),
+                          onChanged: (v) => setSheetState(() => _filterDurationOperator = v!),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Slider(
+                            value: _filterDurationValue,
+                            min: 0,
+                            max: 240,
+                            divisions: 24,
+                            activeColor: Colors.cyanAccent,
+                            inactiveColor: Colors.white24,
+                            label: '${_filterDurationValue.toInt()} mins',
+                            onChanged: (v) => setSheetState(() => _filterDurationValue = v),
+                          ),
+                        ),
+                        Text('${_filterDurationValue.toInt()}m', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 30),
+                    
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.cyanAccent.shade700,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: () {
+                          setState(() {});
+                          _applyFilters();
+                          Navigator.pop(ctx);
+                        },
+                        child: const Text('Apply Filters', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
@@ -798,25 +936,55 @@ class _SessionsScreenState extends State<SessionsScreen> {
     );
   }
 
-  Future<void> _downloadRangeReport(DateTime from, DateTime to) async {
+  Future<void> _downloadFilteredReport({bool isExcel = false}) async {
+    if (_filteredHistorySessions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No sessions to download. Adjust filters.'), backgroundColor: Colors.orange));
+      return;
+    }
+    
+    DateTime? from = _filterDateRange?.start;
+    DateTime? to = _filterDateRange?.end;
+    
+    if (from == null || to == null) {
+       List<DateTime> dates = _filteredHistorySessions.map((s) {
+         try {
+           return DateTime.parse(s['startTime'] ?? s['created_at'] ?? '');
+         } catch (_) { return DateTime.now(); }
+       }).toList();
+       if (dates.isNotEmpty) {
+          dates.sort();
+          from = dates.first;
+          to = dates.last;
+       } else {
+          from = DateTime.now().subtract(const Duration(days: 1));
+          to = DateTime.now();
+       }
+    }
+    
     final fromStr = '${from.year}-${from.month.toString().padLeft(2,'0')}-${from.day.toString().padLeft(2,'0')}';
     final toStr = '${to.year}-${to.month.toString().padLeft(2,'0')}-${to.day.toString().padLeft(2,'0')}';
-    final url = ApiService.getRangeReportPdfUrl(fromStr, toStr);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Preparing Indian Railways Range Report PDF...'), backgroundColor: Color(0xFF003580)),
-      );
-    }
+    
+    String query = 'from_date=$fromStr&to_date=$toStr';
+    if (_filterYard != null) query += '&yard=${Uri.encodeComponent(_filterYard!)}';
+    if (_filterPilot != null) query += '&pilot=${Uri.encodeComponent(_filterPilot!)}';
+    if (_filterDeviceId.isNotEmpty) query += '&device=${Uri.encodeComponent(_filterDeviceId)}';
+    if (_filterDurationValue > 0) query += '&dur_op=${Uri.encodeComponent(_filterDurationOperator)}&dur_val=$_filterDurationValue';
+    query += '&sort_by=${Uri.encodeComponent(_sortBy)}&sort_asc=$_sortAscending';
+
+    // Instead of directly using ApiService logic, construct the correct report URL
+    final token = await UserSession().token ?? '';
+    final url = '${ApiService.baseUrl}/reports/range/pdf?$query&token=$token';
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Generating Filtered Report...'), backgroundColor: Color(0xFF003580)),
+    );
     try {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to open report: $e'), backgroundColor: Colors.redAccent),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.redAccent));
     }
   }
+
 
   Widget _buildHistorySessionItem(dynamic session) {
         final duration = session['duration'] ?? '--';
