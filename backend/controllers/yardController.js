@@ -87,7 +87,7 @@ const addYardLine = async (req, res) => {
     }
 
     const newLine = await db.query(
-      'INSERT INTO yard_lines (yard_id, line_code, line_name, line_type, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      'INSERT INTO yard_lines (yard_id, line_number, line_name, line_type, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [yardId, line_code, line_name, line_type, 'Active']
     );
 
