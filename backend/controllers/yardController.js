@@ -10,9 +10,10 @@ const createYard = async (req, res) => {
       return res.status(400).json({ message: 'Yard name is required' });
     }
 
+    const yard_code = 'YRD-' + Math.floor(Math.random() * 10000);
     const newYard = await db.query(
-      'INSERT INTO yards (yard_name, location, status) VALUES ($1, $2, $3) RETURNING *',
-      [yard_name, location, 'Active']
+      'INSERT INTO yards (yard_code, yard_name, station, division, zone, yard_type, status) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [yard_code, yard_name, location || 'Unknown', 'N/A', 'N/A', 'Mixed', 'Active']
     );
 
     res.status(201).json(newYard.rows[0]);

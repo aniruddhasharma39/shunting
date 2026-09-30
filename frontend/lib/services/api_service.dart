@@ -4,8 +4,19 @@ import 'package:image_picker/image_picker.dart';
 import 'user_session.dart';
 
 class ApiService {
-  // static const String baseUrl = 'https://shunting-backend.onrender.com/api';
-  static const String baseUrl = 'http://127.0.0.1:5000/api';
+  // Set to true to test with your local backend, false to use the Render backend
+  static const bool useLocalhost = true;
+
+  // IMPORTANT:
+  // - For Web/Chrome testing: '127.0.0.1' or 'localhost'
+  // - For Android Emulator: '10.0.2.2'
+  // - For Physical Phone (APK): Use your computer's WiFi IPv4 Address (e.g. '192.168.x.x')
+  static const String localIp = '127.0.0.1';
+  static const String localPort = '5000'; // Change to 3000 if your backend uses 3000
+
+  static const String baseUrl = useLocalhost
+      ? 'http://$localIp:$localPort/api'
+      : 'https://shunting-backend.onrender.com/api';
 
   /// Get auth headers with Bearer token
   static Map<String, String> _authHeaders() {
@@ -44,7 +55,7 @@ class ApiService {
         return {'success': false, 'message': data['message'] ?? 'Registration failed'};
       }
     } catch (e) {
-      return {'success': false, 'message': 'Network error or Server unreachable. Check database connection.'};
+      return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
@@ -60,7 +71,7 @@ class ApiService {
           'loginId': loginId,
           'password': password,
         }),
-      );
+      ).timeout(const Duration(seconds: 120));
 
       final data = jsonDecode(response.body);
 
@@ -72,7 +83,7 @@ class ApiService {
         return {'success': false, 'message': data['message'] ?? 'Login failed'};
       }
     } catch (e) {
-      return {'success': false, 'message': 'Network error or Server unreachable. Check database connection.'};
+      return {'success': false, 'message': 'Network error: $e'};
     }
   }
 

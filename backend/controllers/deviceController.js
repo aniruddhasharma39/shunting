@@ -81,7 +81,7 @@ const getDevices = async (req, res) => {
       SELECT 
         COALESCE(d.id, dr.id) as id,
         COALESCE(d.device_code, dr.device_id) as device_code,
-        COALESCE(d.device_id, dr.device_id) as device_id,
+        COALESCE(d.device_code, dr.device_id) as device_id,
         COALESCE(
           d.device_type,
           CASE 
