@@ -8,7 +8,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import '../widgets/app_drawer.dart';
 import '../services/api_service.dart';
-import 'live_telemetry_screen.dart';class SessionsScreen extends StatefulWidget {
+import 'live_telemetry_screen.dart';
+import 'package:open_file/open_file.dart';
+
+class SessionsScreen extends StatefulWidget {
   const SessionsScreen({super.key});
 
   @override
@@ -1345,30 +1348,66 @@ class _SessionAuditDialogState extends State<SessionAuditDialog> with SingleTick
   Future<void> _exportPdf() async {
     final sessionId = widget.session['id']?.toString() ?? widget.session['session_code']?.toString();
     if (sessionId == null) return;
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Downloading PDF Report...'), backgroundColor: Colors.cyan, duration: Duration(seconds: 2)),
+      );
+    }
+
     final url = ApiService.getSessionPdfUrl(sessionId);
     try {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Downloading Session PDF Report...'), backgroundColor: Colors.cyan),
-        );
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+         final tempDir = await getTemporaryDirectory();
+         final file = File('${tempDir.path}/Session_Report_$sessionId.pdf');
+         await file.writeAsBytes(response.bodyBytes);
+         
+         if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+             const SnackBar(content: Text('Report Downloaded. Opening...'), backgroundColor: Colors.green),
+           );
+         }
+         
+         await OpenFile.open(file.path);
+      } else {
+         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to download PDF'), backgroundColor: Colors.red));
       }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error downloading PDF: $e')));
     }
   }
 
   Future<void> _exportExcel() async {
     final sessionId = widget.session['id']?.toString() ?? widget.session['session_code']?.toString();
     if (sessionId == null) return;
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Downloading Excel Report...'), backgroundColor: Colors.cyan, duration: Duration(seconds: 2)),
+      );
+    }
+
     final url = ApiService.getSessionExcelUrl(sessionId);
     try {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Downloading Session Excel Report...'), backgroundColor: Colors.cyan),
-        );
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+         final tempDir = await getTemporaryDirectory();
+         final file = File('${tempDir.path}/Session_Report_$sessionId.xlsx');
+         await file.writeAsBytes(response.bodyBytes);
+         
+         if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+             const SnackBar(content: Text('Report Downloaded. Opening...'), backgroundColor: Colors.green),
+           );
+         }
+         
+         await OpenFile.open(file.path);
+      } else {
+         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to download Excel'), backgroundColor: Colors.red));
       }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error downloading Excel: $e')));
     }
   }
 
