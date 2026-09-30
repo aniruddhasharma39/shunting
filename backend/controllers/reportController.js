@@ -301,7 +301,10 @@ async function fetchSessionDataForReport(sessionId) {
     });
   } else if (session) {
     const telRes = await db.query(`
-      SELECT (payload->>'distance_cm')::numeric as distance_cm, (payload->>'speed_kmh')::numeric as speed_kmh, battery_level, recorded_at
+      SELECT COALESCE(distance_cm, (payload->>'distance_cm')::numeric, (payload->>'distance')::numeric * 100) as distance_cm, 
+             COALESCE(speed_kmh, (payload->>'speed_kmh')::numeric, 0.0) as speed_kmh, 
+             COALESCE(battery_level, (payload->'diagnostics'->>'battery_pct')::numeric, (payload->>'battery_pct')::numeric) as battery_level, 
+             recorded_at
       FROM device_telemetry
       WHERE (device_id = $1::text OR device_id = $2::text)
         AND recorded_at >= ($3::timestamptz - INTERVAL '5 MINUTES')
@@ -330,17 +333,14 @@ async function fetchSessionDataForReport(sessionId) {
     let distM = pt.distCm / 100;
     let tMs = pt.time.getTime();
 
-    if (distM > 45) {
-      // Exclude completely
-      return;
-    } else if (distM > 30) {
-      // 10 second polling
+    if (distM > 30) {
+      // 10 second polling for > 30m
       if (tMs - lastTime45 >= 10000) {
         filteredPoints.push(pt);
         lastTime45 = tMs;
       }
     } else if (distM > 15) {
-      // 5 second polling
+      // 5 second polling for 15-30m
       if (tMs - lastTime30 >= 5000) {
         filteredPoints.push(pt);
         lastTime30 = tMs;
@@ -378,7 +378,7 @@ async function fetchSessionDataForReport(sessionId) {
     let dM = (grp.startPt.distCm / 100).toFixed(2);
     
     let zone = '';
-    if (grp.startPt.distCm > 3000) zone = '30-45m Zone (10s)';
+    if (grp.startPt.distCm > 3000) zone = '>30m Zone (10s)';
     else if (grp.startPt.distCm > 1500) zone = '15-30m Zone (5s)';
     else zone = '<15m Zone (Max)';
 

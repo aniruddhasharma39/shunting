@@ -547,46 +547,25 @@ const getSessionDetailsWithLogs = async (req, res) => {
 
     // 3. Build Tabular Logs
     const tabularLogs = [];
+    let points = [];
 
     // If trajectory points exist in JSON
     if (Array.isArray(rawTrajectory) && rawTrajectory.length > 0) {
-      rawTrajectory.forEach((pt, index) => {
-        const timestamp = pt.t ? new Date(pt.t).toISOString() : sessionMeta.startTime;
+      rawTrajectory.forEach((pt) => {
+        const timestamp = pt.t ? new Date(pt.t) : (sessionMeta.startTime ? new Date(sessionMeta.startTime) : new Date());
         const distCm = pt.d_cm ?? pt.distance_cm ?? (pt.distance ? Math.round(Number(pt.distance) * 100) : null);
-        const distM = distCm != null ? parseFloat((distCm / 100).toFixed(2)) : null;
         const speed = pt.speed_kmh ?? 0.0;
         const battery = pt.battery ?? null;
         const signal = pt.signal ?? -65;
-
-        let safetyStatus = 'NORMAL';
-        if (distM !== null) {
-          if (distM < 5.0) safetyStatus = 'CRITICAL HAZARD';
-          else if (distM <= 20.0) safetyStatus = 'APPROACHING';
-          else safetyStatus = 'SAFE CLEARANCE';
+        
+        if (distCm != null) {
+          points.push({ time: timestamp, distCm, speed, battery, signal });
         }
-
-        const dateObj = new Date(timestamp);
-        const timeStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }) : '--:--:--';
-
-        tabularLogs.push({
-          index: index + 1,
-          time: timeStr,
-          timestamp: timestamp,
-          distance_cm: distCm,
-          distance_m: distM,
-          distance_display: distM !== null ? `${distM.toFixed(2)}m` : '--m',
-          speed_kmh: speed,
-          speed_display: `${Number(speed).toFixed(1)} km/h`,
-          rx_battery: battery !== null ? `${battery}%` : '--',
-          tx_battery: battery !== null ? `${battery}%` : '--',
-          signal_rssi: `${signal} dBm`,
-          safety_status: safetyStatus
-        });
       });
     }
 
-    // If tabularLogs is still empty or few, query device_telemetry directly
-    if (tabularLogs.length < 5 && sessionMeta.startTime) {
+    // If points is still empty or few, query device_telemetry directly
+    if (points.length < 5 && sessionMeta.startTime) {
       const startTime = sessionMeta.startTime;
       const endTime = sessionMeta.endTime || new Date();
 
@@ -597,47 +576,71 @@ const getSessionDetailsWithLogs = async (req, res) => {
           AND recorded_at >= ($3::timestamptz - INTERVAL '5 MINUTES')
           AND recorded_at <= ($4::timestamptz + INTERVAL '5 MINUTES')
         ORDER BY recorded_at ASC
-        LIMIT 100
+        LIMIT 1000
       `, [sessionMeta.ldDevice, sessionMeta.deDevice || sessionMeta.ldDevice, startTime, endTime]);
 
       if (telRes.rows.length > 0) {
-        tabularLogs.length = 0; // replace with granular DB logs
-        telRes.rows.forEach((row, index) => {
+        points = []; // replace with granular DB logs
+        telRes.rows.forEach((row) => {
           const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : (row.payload || {});
           const distCm = row.distance_cm ?? payload.readings?.distance_cm ?? payload.distance_cm ?? (payload.distance ? Math.round(Number(payload.distance) * 100) : null);
-          const distM = distCm != null ? parseFloat((distCm / 100).toFixed(2)) : null;
           const speed = row.speed_kmh ?? payload.speed_kmh ?? 0.0;
           const battery = row.battery_level ?? payload.diagnostics?.battery_pct ?? payload.battery_pct ?? null;
           const signal = row.signal_rssi ?? payload.diagnostics?.gsm_rssi ?? payload.gsm_rssi ?? -65;
 
-          let safetyStatus = 'NORMAL';
-          if (distM !== null) {
-            if (distM < 5.0) safetyStatus = 'CRITICAL HAZARD';
-            else if (distM <= 20.0) safetyStatus = 'APPROACHING';
-            else safetyStatus = 'SAFE CLEARANCE';
+          if (distCm != null) {
+            points.push({ time: new Date(row.recorded_at), distCm, speed, battery, signal });
           }
-
-          const dateObj = new Date(row.recorded_at);
-          const timeStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }) : '--:--:--';
-
-          tabularLogs.push({
-            index: index + 1,
-            time: timeStr,
-            timestamp: row.recorded_at,
-            deviceId: row.device_id,
-            distance_cm: distCm,
-            distance_m: distM,
-            distance_display: distM !== null ? `${distM.toFixed(2)}m` : '--m',
-            speed_kmh: speed,
-            speed_display: `${Number(speed).toFixed(1)} km/h`,
-            rx_battery: battery !== null ? `${battery}%` : '--',
-            tx_battery: battery !== null ? `${battery}%` : '--',
-            signal_rssi: `${signal} dBm`,
-            safety_status: safetyStatus
-          });
         });
       }
     }
+
+    // Deduplicate consecutive identical points
+    points.sort((a, b) => a.time - b.time);
+    let compressed = [];
+    let currentGroup = null;
+
+    points.forEach(pt => {
+      if (!currentGroup) {
+        currentGroup = { startPt: pt, endPt: pt, count: 1 };
+      } else {
+        if (pt.distCm === currentGroup.startPt.distCm && pt.speed === currentGroup.startPt.speed) {
+          currentGroup.endPt = pt;
+          currentGroup.count++;
+        } else {
+          compressed.push(currentGroup);
+          currentGroup = { startPt: pt, endPt: pt, count: 1 };
+        }
+      }
+    });
+    if (currentGroup) compressed.push(currentGroup);
+
+    compressed.forEach((grp, index) => {
+      let t1 = grp.startPt.time.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false });
+      let t2 = grp.endPt.time.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false });
+      let timeStr = (t1 === t2) ? t1 : `${t1} - ${t2}`;
+      
+      const distM = parseFloat((grp.startPt.distCm / 100).toFixed(2));
+      let safetyStatus = 'NORMAL';
+      if (distM < 5.0) safetyStatus = 'CRITICAL HAZARD';
+      else if (distM <= 20.0) safetyStatus = 'APPROACHING';
+      else safetyStatus = 'SAFE CLEARANCE';
+
+      tabularLogs.push({
+        index: index + 1,
+        time: timeStr,
+        timestamp: grp.startPt.time.toISOString(),
+        distance_cm: grp.startPt.distCm,
+        distance_m: distM,
+        distance_display: `${distM.toFixed(2)}m`,
+        speed_kmh: grp.startPt.speed,
+        speed_display: `${Number(grp.startPt.speed).toFixed(1)} km/h`,
+        rx_battery: grp.startPt.battery !== null ? `${grp.startPt.battery}%` : '--',
+        tx_battery: grp.startPt.battery !== null ? `${grp.startPt.battery}%` : '--',
+        signal_rssi: `${grp.startPt.signal} dBm`,
+        safety_status: safetyStatus
+      });
+    });
 
     res.json({
       success: true,
