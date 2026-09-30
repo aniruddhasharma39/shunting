@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/user_session.dart';
 
 class RegistrationScreen extends StatefulWidget {
-  const RegistrationScreen({super.key});
+  final bool isAdminCreatingUser;
+  const RegistrationScreen({super.key, this.isAdminCreatingUser = false});
 
   @override
   State<RegistrationScreen> createState() => _RegistrationScreenState();
@@ -20,13 +22,22 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool _isLoading = false;
   String? _selectedDesignation;
 
-  final List<String> _designations = [
-    'Super Administrator',
-    'Yard Administrator',
-    'Hardware Engineer',
-    'Maintenance User',
-    'Viewer / Control Room User'
-  ];
+  List<String> get _designations {
+    final role = UserSession().role;
+    if (widget.isAdminCreatingUser && role == 'yard_admin') {
+      return [
+        'Maintenance User',
+        'Viewer / Control Room User'
+      ];
+    }
+    return [
+      'Super Administrator',
+      'Yard Administrator',
+      'Hardware Engineer',
+      'Maintenance User',
+      'Viewer / Control Room User'
+    ];
+  }
 
   @override
   void dispose() {
@@ -69,6 +80,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       email: email,
       designation: _selectedDesignation!,
       password: password,
+      isAdminCreatingUser: widget.isAdminCreatingUser,
     );
 
     setState(() {
@@ -243,20 +255,21 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             const SizedBox(height: 16),
             
             // Footer
-            Center(
-              child: GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: RichText(
-                  text: const TextSpan(
-                    style: TextStyle(color: AppTheme.subtitleColor, fontSize: 14),
-                    children: [
-                      TextSpan(text: 'Already have an account? '),
-                      TextSpan(text: 'Log in here.', style: TextStyle(fontWeight: FontWeight.bold, decoration: TextDecoration.underline, color: AppTheme.primaryColor)),
-                    ],
+            if (!widget.isAdminCreatingUser)
+              Center(
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: RichText(
+                    text: const TextSpan(
+                      style: TextStyle(color: AppTheme.subtitleColor, fontSize: 14),
+                      children: [
+                        TextSpan(text: 'Already have an account? '),
+                        TextSpan(text: 'Log in here.', style: TextStyle(fontWeight: FontWeight.bold, decoration: TextDecoration.underline, color: AppTheme.primaryColor)),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
             const SizedBox(height: 12),
             Center(
               child: const Text('System v2.4.1 | Server: Active', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),

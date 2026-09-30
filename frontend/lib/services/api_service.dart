@@ -44,17 +44,21 @@ class ApiService {
     required String email,
     required String designation,
     required String password,
+    bool isAdminCreatingUser = false,
   }) async {
     try {
+      final headers = isAdminCreatingUser ? _authHeaders() : {'Content-Type': 'application/json'};
+      
       final response = await http.post(
         Uri.parse('$baseUrl/auth/register'),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: jsonEncode({
           'fullName': fullName,
           'employeeId': employeeId,
           'email': email,
           'designation': designation,
           'password': password,
+          'isAdminCreatingUser': isAdminCreatingUser,
         }),
       );
 
@@ -260,6 +264,26 @@ class ApiService {
         return {'success': true, 'message': data['message'], 'isActive': data['isActive']};
       } else {
         return {'success': false, 'message': data['message'] ?? 'Failed'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Network error.'};
+    }
+  }
+
+  /// Delete a user (Super Admin only)
+  static Future<Map<String, dynamic>> deleteUser(String userId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/auth/users/$userId'),
+        headers: _authHeaders(),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': data['message'] ?? 'User deleted'};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Delete failed'};
       }
     } catch (e) {
       return {'success': false, 'message': 'Network error.'};

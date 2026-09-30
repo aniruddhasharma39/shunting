@@ -49,7 +49,26 @@ exports.register = async (req, res) => {
     // Check if this is the first user in the system
     const userCountResult = await db.query('SELECT COUNT(*) FROM users');
     const isFirstUser = parseInt(userCountResult.rows[0].count) === 0;
-    const isActive = isFirstUser; // Only the first user is active automatically
+    let isActive = isFirstUser; // Only the first user is active automatically
+
+    if (req.body.isAdminCreatingUser) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
+        try {
+          const decoded = jwt.verify(token, JWT_SECRET);
+          if (decoded.role === 'super_admin' || decoded.role === 'yard_admin') {
+            isActive = true;
+          }
+          
+          if (decoded.role === 'yard_admin' && !['Maintenance User', 'Viewer / Control Room User'].includes(designation)) {
+            return res.status(403).json({ message: 'Forbidden: You do not have permission to create this role.' });
+          }
+        } catch (err) {
+          console.warn('Admin creation token verification failed', err);
+        }
+      }
+    }
 
     // 3. Hash password
     const salt = await bcrypt.genSalt(10);
@@ -194,13 +213,19 @@ exports.deleteProfilePicture = async (req, res) => {
   }
 };
 
-// GET /api/auth/users - List all users (Super Admin only)
+// GET /api/auth/users - List all users
 exports.listUsers = async (req, res) => {
   try {
-    const result = await db.query(
-      `SELECT id, full_name, employee_id, email, designation, role, is_active, created_at, profile_pic_url
-       FROM users ORDER BY created_at DESC`
-    );
+    let query = `SELECT id, full_name, employee_id, email, designation, role, is_active, created_at, profile_pic_url FROM users`;
+    let params = [];
+    
+    if (req.user.role === 'yard_admin') {
+      query += ` WHERE role IN ('maintenance_user', 'viewer')`;
+    }
+    
+    query += ` ORDER BY created_at DESC`;
+    
+    const result = await db.query(query, params);
 
     // For each user, fetch their assigned yards
     const users = await Promise.all(result.rows.map(async (user) => {
@@ -236,6 +261,15 @@ exports.toggleUserActive = async (req, res) => {
       return res.status(400).json({ message: 'You cannot deactivate your own account.' });
     }
 
+    // Role Hierarchy check for yard_admin
+    if (req.user.role === 'yard_admin') {
+      const targetUserCheck = await db.query('SELECT role FROM users WHERE id = $1', [id]);
+      if (targetUserCheck.rows.length === 0) return res.status(404).json({ message: 'User not found' });
+      if (!['maintenance_user', 'viewer'].includes(targetUserCheck.rows[0].role)) {
+        return res.status(403).json({ message: 'Forbidden: You do not have permission to manage this user role.' });
+      }
+    }
+
     const result = await db.query(
       'UPDATE users SET is_active = NOT is_active WHERE id = $1 RETURNING id, full_name, is_active',
       [id]
@@ -253,5 +287,48 @@ exports.toggleUserActive = async (req, res) => {
   } catch (error) {
     console.error('Error in toggleUserActive:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// DELETE /api/auth/users/:id - Delete user completely (Super Admin only)
+exports.deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Prevent deleting yourself
+    if (id === req.user.id) {
+      return res.status(400).json({ message: 'You cannot delete your own account.' });
+    }
+
+    // Role Hierarchy check for yard_admin
+    if (req.user.role === 'yard_admin') {
+      const targetUserCheck = await db.query('SELECT role FROM users WHERE id = $1', [id]);
+      if (targetUserCheck.rows.length === 0) return res.status(404).json({ message: 'User not found' });
+      if (!['maintenance_user', 'viewer'].includes(targetUserCheck.rows[0].role)) {
+        return res.status(403).json({ message: 'Forbidden: You do not have permission to manage this user role.' });
+      }
+    }
+
+    // Since user id might be referenced in device_assignments or session_assignments
+    // We should either cascade delete or check constraints
+    // Let's assume standard postgres setup with ON DELETE SET NULL or ON DELETE CASCADE
+    // If not, we might need to handle it. For now, we will do a direct delete.
+    const result = await db.query(
+      'DELETE FROM users WHERE id = $1 RETURNING id',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    res.status(200).json({ message: 'User deleted successfully.' });
+  } catch (error) {
+    console.error('Error in deleteUser:', error);
+    if (error.code === '23503') { // Foreign key violation
+      res.status(400).json({ message: 'Cannot delete user because they are associated with existing records (e.g., assignments or sessions).' });
+    } else {
+      res.status(500).json({ message: 'Server error' });
+    }
   }
 };

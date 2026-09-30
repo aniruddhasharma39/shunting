@@ -39,4 +39,9 @@ router.get('/users', verifyToken, requireRole('super_admin', 'yard_admin'), auth
 // @access  Private (Super Admin only)
 router.put('/users/:id/toggle-active', verifyToken, requireRole('super_admin'), authController.toggleUserActive);
 
+// @route   DELETE /api/auth/users/:id
+// @desc    Delete a user completely
+// @access  Private (Super Admin only)
+router.delete('/users/:id', verifyToken, requireRole('super_admin'), authController.deleteUser);
+
 module.exports = router;

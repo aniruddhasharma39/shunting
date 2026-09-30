@@ -158,9 +158,34 @@ const removeYardAssignment = async (req, res) => {
 const deleteYard = async (req, res) => {
   try {
     const { yardId } = req.params;
-    await db.query('DELETE FROM yards WHERE id = $1', [yardId]);
+
+    // Check if any devices are assigned to this yard
+    const devicesResult = await db.query('SELECT COUNT(*) FROM devices WHERE yard_id = $1', [yardId]);
+    if (parseInt(devicesResult.rows[0].count) > 0) {
+      return res.status(400).json({ message: 'Cannot delete yard because there are devices assigned to it.' });
+    }
+
+    // Begin transaction to ensure atomic deletion
+    await db.query('BEGIN');
+    
+    // Delete assignments first
+    await db.query('DELETE FROM user_yard_assignments WHERE yard_id = $1', [yardId]);
+    
+    // Delete lines next
+    await db.query('DELETE FROM yard_lines WHERE yard_id = $1', [yardId]);
+    
+    // Delete the yard
+    const yardResult = await db.query('DELETE FROM yards WHERE id = $1 RETURNING id', [yardId]);
+    
+    if (yardResult.rows.length === 0) {
+      await db.query('ROLLBACK');
+      return res.status(404).json({ message: 'Yard not found' });
+    }
+
+    await db.query('COMMIT');
     res.status(200).json({ message: 'Yard deleted successfully' });
   } catch (error) {
+    await db.query('ROLLBACK');
     console.error('Error deleting yard:', error);
     res.status(500).json({ message: 'Server error deleting yard' });
   }

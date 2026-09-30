@@ -1494,7 +1494,7 @@ class _SessionAuditDialogState extends State<SessionAuditDialog> with SingleTick
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: Container(
         width: MediaQuery.of(context).size.width >= 800 ? 800 : MediaQuery.of(context).size.width * 0.95,
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+        height: MediaQuery.of(context).size.height * 0.85,
         child: Column(
           children: [
             // Top Header

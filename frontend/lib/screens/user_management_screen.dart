@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/user_session.dart';
+import 'registration_screen.dart';
 
 class UserManagementScreen extends StatefulWidget {
   const UserManagementScreen({super.key});
@@ -205,6 +206,109 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     }
   }
 
+  Map<String, List<Map<String, dynamic>>> get _groupedUsers {
+    final Map<String, List<Map<String, dynamic>>> groups = {};
+    for (var user in _users) {
+      final role = _getRoleLabel(user['role']?.toString());
+      if (!groups.containsKey(role)) {
+        groups[role] = [];
+      }
+      groups[role]!.add(user);
+    }
+    return groups;
+  }
+
+  Future<void> _deleteUserWithConfirmation(Map<String, dynamic> user) async {
+    final expectedEmail = user['email'] ?? '';
+    final expectedName = user['fullName'] ?? 'Unknown';
+    String inputText = '';
+    
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF0F172A),
+              title: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+                  const SizedBox(width: 10),
+                  const Text('Delete User', style: TextStyle(color: Colors.redAccent)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'You are about to permanently delete the user $expectedName.',
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Please type their email address to confirm:',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    expectedEmail,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    onChanged: (val) {
+                      setState(() {
+                        inputText = val;
+                      });
+                    },
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: const Color(0xFF1E293B),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      hintText: 'Type email here...',
+                      hintStyle: const TextStyle(color: Colors.white38),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+                ),
+                ElevatedButton(
+                  onPressed: inputText.trim() == expectedEmail.trim()
+                      ? () => Navigator.pop(context, true)
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    disabledBackgroundColor: Colors.redAccent.withValues(alpha: 0.3),
+                  ),
+                  child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result == true) {
+      final res = await ApiService.deleteUser(user['id'].toString());
+      if (!mounted) return;
+      if (res['success']) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message']), backgroundColor: Colors.green));
+        _loadData();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message']), backgroundColor: Colors.red));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -253,10 +357,68 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   onRefresh: _loadData,
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: _users.length,
-                    itemBuilder: (context, index) => _buildUserCard(_users[index]),
+                    itemCount: _groupedUsers.keys.length,
+                    itemBuilder: (context, index) {
+                      final roleName = _groupedUsers.keys.elementAt(index);
+                      final roleUsers = _groupedUsers[roleName]!;
+                      
+                      return Theme(
+                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        child: Card(
+                          color: const Color(0xFF1E293B),
+                          margin: const EdgeInsets.only(bottom: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          child: ExpansionTile(
+                            initiallyExpanded: false,
+                            iconColor: Colors.cyanAccent,
+                            collapsedIconColor: Colors.white54,
+                            title: Row(
+                              children: [
+                                Text(
+                                  roleName,
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.cyanAccent.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    '${roleUsers.length}',
+                                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF0F172A),
+                                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+                                ),
+                                child: Column(
+                                  children: roleUsers.map((u) => _buildUserCard(u)).toList(),
+                                ),
+                              )
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => const RegistrationScreen(isAdminCreatingUser: true)));
+          _loadData();
+        },
+        backgroundColor: Colors.cyanAccent.shade700,
+        icon: const Icon(Icons.person_add, color: Colors.white),
+        label: const Text('Add User', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ),
     );
   }
 
@@ -446,23 +608,30 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                if (user['id'] != UserSession().id)
+                if (user['id'] != UserSession().id) ...[
+                  TextButton.icon(
+                    onPressed: () => _deleteUserWithConfirmation(user),
+                    icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+                    label: const Text('Delete', style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(width: 8),
                   TextButton.icon(
                     onPressed: () => _toggleUserActive(user),
                     icon: Icon(
                       isActive ? Icons.block : Icons.check_circle_outline,
                       size: 16,
-                      color: isActive ? Colors.red : Colors.green,
+                      color: isActive ? Colors.orange : Colors.green,
                     ),
                     label: Text(
                       isActive ? 'Deactivate' : 'Activate',
                       style: TextStyle(
-                        color: isActive ? Colors.red : Colors.green,
+                        color: isActive ? Colors.orange : Colors.green,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
+                ]
               ],
             ),
           ),
