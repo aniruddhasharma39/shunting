@@ -141,34 +141,50 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     isExpanded: true,
+                    itemHeight: 70.0,
                     value: (selectedDeviceId != null && _availableLDs.any((d) => d['id'].toString() == selectedDeviceId)) ? selectedDeviceId : null,
                     hint: const Text('Select a Loco Unit (Receiver)'),
                     items: _availableLDs.map((d) {
+                      String lastSeen = 'Never';
+                      if (d['last_reading_timestamp'] != null) {
+                        try {
+                          final dt = DateTime.parse(d['last_reading_timestamp']).toLocal();
+                          lastSeen = '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+                        } catch (_) {}
+                      }
                       final code = d['device_code'] ?? d['device_id'] ?? 'LD';
                       final type = d['device_type'] ?? 'Loco Unit';
-                      final batt = d['battery_level'] ?? '95%';
-                      final status = d['network_status'] ?? 'Online';
+                      final batt = d['battery_level'] ?? '--';
+                      final status = d['health_status'] ?? d['network_status'] ?? 'Online';
+                      
                       return DropdownMenuItem<String>(
                         value: d['id'].toString(),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.train, size: 18, color: AppTheme.primaryColor),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text('$code ($type)', 
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), 
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                            Row(
+                              children: [
+                                const Icon(Icons.train, size: 18, color: AppTheme.primaryColor),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text('$code ($type)', 
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), 
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(status, style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.w600)),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.green.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text('🔋 $batt • $status', style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.w600)),
-                            ),
+                            const SizedBox(height: 4),
+                            Text("Last seen: $lastSeen", style: const TextStyle(fontSize: 12, color: Colors.grey)),
                           ],
                         ),
                       );

@@ -703,6 +703,7 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         isExpanded: true,
+                        itemHeight: 70.0,
                         value: selectedDeviceId,
                         hint: const Text('Select a transmitter'),
                         items: [
@@ -711,9 +712,48 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                             child: Text('None (Unassign)', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
                           ),
                           ..._unassignedDeadEnds.map((d) {
+                            String lastSeen = 'Never';
+                            if (d['last_reading_timestamp'] != null) {
+                              try {
+                                final dt = DateTime.parse(d['last_reading_timestamp']).toLocal();
+                                lastSeen = '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+                              } catch (_) {}
+                            }
+                            final code = d['device_code'] ?? d['device_id'] ?? 'DE';
+                            final type = d['device_type'] ?? 'Dead-End';
+                            final batt = d['battery_level'] ?? '--';
+                            final status = d['health_status'] ?? d['network_status'] ?? 'Online';
+
                             return DropdownMenuItem<String>(
                               value: d['id'].toString(),
-                              child: Text("${d['device_code']} (${d['device_type'] ?? 'Dead-End'})"),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.router, size: 18, color: AppTheme.primaryColor),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text('$code ($type)', 
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), 
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(status, style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.w600)),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text("Last seen: $lastSeen", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                ],
+                              ),
                             );
                           }),
                         ],
