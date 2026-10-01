@@ -246,10 +246,14 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
             padding: EdgeInsets.symmetric(vertical: 8.0),
             child: Divider(),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(Icons.vertical_align_bottom, size: 16, color: AppTheme.subtitleColor),
                   const SizedBox(width: 4),
@@ -265,6 +269,7 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                 ],
               ),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
                     icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
@@ -713,9 +718,10 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                           ),
                           ..._unassignedDeadEnds.map((d) {
                             String lastSeen = 'Never';
-                            if (d['last_reading_timestamp'] != null) {
+                            final lastTs = d['last_reading_timestamp'] ?? d['last_heartbeat'];
+                            if (lastTs != null) {
                               try {
-                                final dt = DateTime.parse(d['last_reading_timestamp']).toLocal();
+                                final dt = DateTime.parse(lastTs.toString()).toLocal();
                                 lastSeen = '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
                               } catch (_) {}
                             }

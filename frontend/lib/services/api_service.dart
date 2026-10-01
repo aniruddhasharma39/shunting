@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'user_session.dart';
 
 class ApiService {
-  // Set to true to test with your local backend, false to use the Render backend
-  static const bool useLocalhost = true;
+  // Set to true to test with your local backend, false to use the AWS backend
+  static const bool useLocalhost = false;
 
   // IMPORTANT:
   // - For Web/Chrome testing: '127.0.0.1' or 'localhost'
@@ -16,7 +16,7 @@ class ApiService {
 
   static String get baseUrl {
     if (!useLocalhost) {
-      return 'https://shunting-backend.onrender.com/api';
+      return 'http://13.234.30.131:5000/api';
     }
 
     if (kIsWeb) {

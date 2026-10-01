@@ -14,7 +14,6 @@ class AppTheme {
     return ThemeData(
       primaryColor: primaryColor,
       scaffoldBackgroundColor: backgroundColor,
-      fontFamily: 'Roboto', // Default sans-serif
       appBarTheme: const AppBarTheme(
         backgroundColor: backgroundColor,
         elevation: 0,

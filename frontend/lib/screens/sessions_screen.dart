@@ -976,7 +976,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
     query += '&sort_by=${Uri.encodeComponent(_sortBy)}&sort_asc=$_sortAscending';
 
     // Instead of directly using ApiService logic, construct the correct report URL
-    final token = await UserSession().token ?? '';
+    final token = UserSession().token ?? '';
     final url = '${ApiService.baseUrl}/reports/range/pdf?$query&token=$token';
     
     showDialog(

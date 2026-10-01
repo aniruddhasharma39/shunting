@@ -5,7 +5,7 @@ import '../theme/app_theme.dart';
 import '../widgets/app_drawer.dart';
 import '../services/api_service.dart';
 import '../utils/download_helper.dart';
-
+import '../services/user_session.dart';
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
 
@@ -540,7 +540,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ),
       );
 
-      final token = await UserSession().token;
+      final token = UserSession().token;
       final response = await http.get(
         uri,
         headers: token != null ? {'Authorization': 'Bearer $token'} : {},

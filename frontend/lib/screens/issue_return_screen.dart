@@ -146,9 +146,10 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                     hint: const Text('Select a Loco Unit (Receiver)'),
                     items: _availableLDs.map((d) {
                       String lastSeen = 'Never';
-                      if (d['last_reading_timestamp'] != null) {
+                      final lastTs = d['last_reading_timestamp'] ?? d['last_heartbeat'];
+                      if (lastTs != null) {
                         try {
-                          final dt = DateTime.parse(d['last_reading_timestamp']).toLocal();
+                          final dt = DateTime.parse(lastTs.toString()).toLocal();
                           lastSeen = '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
                         } catch (_) {}
                       }

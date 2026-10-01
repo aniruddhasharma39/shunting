@@ -344,7 +344,39 @@ async function fetchSessionDataForReport(sessionId) {
     WHERE ss.id::text = $1 OR ss.session_number = $1
     LIMIT 1
   `;
-  const ssRes = await db.query(ssQuery, [sessionId]);
+  let ssRes = await db.query(ssQuery, [sessionId]);
+
+  if (ssRes.rows.length === 0) {
+    const daQuery = `
+      SELECT 
+        da.id, 
+        ('SES-' || SUBSTRING(da.id::text, 1, 8)) as session_code,
+        d.device_code as ld_device,
+        NULL as de_device,
+        da.issued_at as start_time, 
+        da.returned_at as end_time,
+        CASE WHEN da.returned_at IS NULL THEN 'LIVE' ELSE 'Completed' END as status,
+        CASE WHEN da.returned_at IS NULL THEN 'LIVE' ELSE 'Completed' END as session_status,
+        NULL::numeric as final_distance_cm,
+        NULL::numeric as minimum_distance,
+        NULL::jsonb as distance_trajectory,
+        COALESCE(u.full_name, 'N/A') as holder_name,
+        COALESCE(u.employee_id, 'N/A') as holder_employee_id,
+        COALESCE(yl.line_name, 'N/A') as line_name,
+        COALESCE(yl.line_number, 'N/A') as line_number,
+        COALESCE(y.yard_name, 'N/A') as yard_name,
+        COALESCE(y.yard_code, 'N/A') as yard_code,
+        da.remarks as manual_close_reason
+      FROM device_assignments da
+      JOIN devices d ON da.device_id = d.id
+      JOIN users u ON da.employee_id = u.id
+      LEFT JOIN yard_lines yl ON d.assigned_line_id = yl.id
+      LEFT JOIN yards y ON COALESCE(yl.yard_id, d.yard_id) = y.id
+      WHERE da.id::text = $1
+      LIMIT 1
+    `;
+    ssRes = await db.query(daQuery, [sessionId]);
+  }
 
   let session = null;
   let rawTrajectory = [];
