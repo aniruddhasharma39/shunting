@@ -154,13 +154,38 @@ exports.handler = async (event, context) => {
         );
 
         if (existing.rows.length === 0) {
-          await client.query(`
-            INSERT INTO shunting_sessions (
-              session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
-              session_start, start_time, session_status, status, distance_trajectory, created_at, updated_at
-            ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', '[]'::jsonb, NOW(), NOW())
-          `, [sessionCode, rxId, txId]);
-          console.log(`[Lambda] Session Started: ${rxId} <--> ${txId}`);
+          // Lookup active assignment for this RX device
+          const assignmentRes = await client.query(`
+            SELECT u.full_name, u.employee_id 
+            FROM device_assignments da
+            JOIN users u ON da.employee_id = u.id
+            JOIN devices d ON d.id = da.device_id
+            WHERE (d.device_code = $1 OR d.id::text = $1) AND da.returned_at IS NULL
+            ORDER BY da.issued_at DESC LIMIT 1
+          `, [rxId]);
+          
+          let empName = null;
+          let empIdNum = null;
+          if (assignmentRes.rows.length > 0) {
+            empName = assignmentRes.rows[0].full_name;
+            empIdNum = assignmentRes.rows[0].employee_id;
+          }
+
+          const readings = event.readings || {};
+          const selectedTargetId = readings.selected_target_id || event.selected_target_id;
+          const hasHardwareTarget = Boolean(event.paired_tx_id || event.paired_rx_id || event.paired_device || (selectedTargetId && selectedTargetId > 0));
+
+          if (!empName && !hasHardwareTarget) {
+            console.log(`[Lambda] Ignored ghost session: ${rxId} is not issued and has no explicit hardware target.`);
+          } else {
+            await client.query(`
+              INSERT INTO shunting_sessions (
+                session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
+                session_start, start_time, session_status, status, distance_trajectory, employee_name, employee_id_number, created_at, updated_at
+              ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', '[]'::jsonb, $4, $5, NOW(), NOW())
+            `, [sessionCode, rxId, txId, empName, empIdNum]);
+            console.log(`[Lambda] Session Started: ${rxId} <--> ${txId} for ${empName || 'Unknown'}`);
+          }
         }
       } else if (eventType === 'PAIR_END' || status === 'IDLE') {
         const finalVal = event.final_distance_cm ?? distanceCm ?? 0;
@@ -241,14 +266,37 @@ exports.handler = async (event, context) => {
         
         if (isExplicitlyPaired) {
           const sessionCode = `SES-${Date.now().toString().slice(-6)}-${rxId}`;
-          await client.query(`
-            INSERT INTO shunting_sessions (
-              session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
-              session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
-              minimum_distance, distance_trajectory, created_at, updated_at
-            ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4::numeric, $4::numeric / 100.0, $4::numeric / 100.0, $5::jsonb, NOW(), NOW())
-          `, [sessionCode, rxId, txId, distanceCm, JSON.stringify([JSON.parse(point)])]);
-          console.log(`[Lambda] Auto-created live session: ${rxId} <--> ${txId}`);
+          // Lookup active assignment for this RX device
+          const assignmentRes = await client.query(`
+            SELECT u.full_name, u.employee_id 
+            FROM device_assignments da
+            JOIN users u ON da.employee_id = u.id
+            JOIN devices d ON d.id = da.device_id
+            WHERE (d.device_code = $1 OR d.id::text = $1) AND da.returned_at IS NULL
+            ORDER BY da.issued_at DESC LIMIT 1
+          `, [rxId]);
+          
+          let empName = null;
+          let empIdNum = null;
+          if (assignmentRes.rows.length > 0) {
+            empName = assignmentRes.rows[0].full_name;
+            empIdNum = assignmentRes.rows[0].employee_id;
+          }
+
+          const hasHardwareTarget = Boolean(event.paired_tx_id || event.paired_rx_id || event.paired_device || (selectedTargetId && selectedTargetId > 0));
+
+          if (!empName && !hasHardwareTarget) {
+            console.log(`[Lambda] Ignored ghost session: ${rxId} is not issued and has no explicit hardware target.`);
+          } else {
+            await client.query(`
+              INSERT INTO shunting_sessions (
+                session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
+                session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
+                minimum_distance, distance_trajectory, employee_name, employee_id_number, created_at, updated_at
+              ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4::numeric, $4::numeric / 100.0, $4::numeric / 100.0, $5::jsonb, $6, $7, NOW(), NOW())
+            `, [sessionCode, rxId, txId, distanceCm, JSON.stringify([JSON.parse(point)]), empName, empIdNum]);
+            console.log(`[Lambda] Auto-created live session: ${rxId} <--> ${txId} for ${empName || 'Unknown'}`);
+          }
         }
       }
     }
