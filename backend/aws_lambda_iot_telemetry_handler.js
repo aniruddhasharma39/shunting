@@ -175,8 +175,8 @@ exports.handler = async (event, context) => {
           const selectedTargetId = readings.selected_target_id || event.selected_target_id;
           const hasHardwareTarget = Boolean(event.paired_tx_id || event.paired_rx_id || event.paired_device || (selectedTargetId && selectedTargetId > 0));
 
-          if (!empName && !hasHardwareTarget) {
-            console.log(`[Lambda] Ignored ghost session: ${rxId} is not issued and has no explicit hardware target.`);
+          if (!hasHardwareTarget) {
+            console.log(`[Lambda] Ignored ghost session: ${rxId} has no explicit hardware target (empName=${empName || 'none'}).`);
           } else {
             await client.query(`
               INSERT INTO shunting_sessions (
@@ -285,8 +285,8 @@ exports.handler = async (event, context) => {
 
           const hasHardwareTarget = Boolean(event.paired_tx_id || event.paired_rx_id || event.paired_device || (selectedTargetId && selectedTargetId > 0));
 
-          if (!empName && !hasHardwareTarget) {
-            console.log(`[Lambda] Ignored ghost session: ${rxId} is not issued and has no explicit hardware target.`);
+          if (!hasHardwareTarget) {
+            console.log(`[Lambda] Ignored ghost session: ${rxId} has no explicit hardware target (empName=${empName || 'none'}).`);
           } else {
             await client.query(`
               INSERT INTO shunting_sessions (

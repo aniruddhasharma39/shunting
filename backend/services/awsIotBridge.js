@@ -336,8 +336,8 @@ class AwsIotBridge {
             const selectedTargetId = readings.selected_target_id || payload.selected_target_id;
             const hasHardwareTarget = Boolean(payload.paired_tx_id || payload.paired_rx_id || payload.paired_device || (selectedTargetId && selectedTargetId > 0));
 
-            if (!empName && !hasHardwareTarget) {
-              console.log(`[AWS IoT] Ignored ghost session: ${rxId} is not issued and has no explicit hardware target.`);
+            if (!hasHardwareTarget) {
+              console.log(`[AWS IoT] Ignored ghost session: ${rxId} has no explicit hardware target (empName=${empName || 'none'}).`);
             } else {
               await db.query(`
                 INSERT INTO shunting_sessions (
@@ -483,8 +483,8 @@ class AwsIotBridge {
               empIdNum = assignmentRes.rows[0].employee_id;
             }
 
-            if (!empName && !hasHardwareTarget) {
-              console.log(`[AWS IoT] Ignored ghost session auto-start: ${rxId} is not issued and has no explicit hardware target.`);
+            if (!hasHardwareTarget) {
+              console.log(`[AWS IoT] Ignored ghost session auto-start: ${rxId} has no explicit hardware target (empName=${empName || 'none'}).`);
             } else {
               await db.query(`
                 INSERT INTO shunting_sessions (
