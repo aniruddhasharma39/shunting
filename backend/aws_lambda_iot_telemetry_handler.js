@@ -171,12 +171,12 @@ exports.handler = async (event, context) => {
             empIdNum = assignmentRes.rows[0].employee_id;
           }
 
-          const readings = event.readings || {};
-          const selectedTargetId = readings.selected_target_id || event.selected_target_id;
-          const hasHardwareTarget = Boolean(event.paired_tx_id || event.paired_rx_id || event.paired_device || (selectedTargetId && selectedTargetId > 0));
+          // Only trust explicit pairing fields, NOT selected_target_id (factory default like 11)
+          const hasRealPairing = Boolean(event.paired_tx_id || event.paired_rx_id || event.paired_device);
+          const isTrustedPairEvent = (eventType === 'PAIR_START');
 
-          if (!hasHardwareTarget) {
-            console.log(`[Lambda] Ignored ghost session: ${rxId} has no explicit hardware target (empName=${empName || 'none'}).`);
+          if (!hasRealPairing && !isTrustedPairEvent) {
+            console.log(`[Lambda] Ignored ghost session: ${rxId} - no real pairing evidence.`);
           } else {
             await client.query(`
               INSERT INTO shunting_sessions (
@@ -260,13 +260,12 @@ exports.handler = async (event, context) => {
       `, [point, distanceCm, txId, rxId]);
 
       if (updateRes.rowCount === 0) {
-        const readings = event.readings || {};
-        const selectedTargetId = readings.selected_target_id || event.selected_target_id;
-        const isExplicitlyPaired = event.paired_tx_id || event.paired_rx_id || event.paired_device || event.status === 'PAIRED' || event.event === 'PAIR_START' || (selectedTargetId && selectedTargetId > 0);
+        // Only trust explicit pairing fields, NOT selected_target_id (factory default)
+        const hasRealPairing = Boolean(event.paired_tx_id || event.paired_rx_id || event.paired_device);
+        const isTrustedPairEvent = (event.event === 'PAIR_START');
         
-        if (isExplicitlyPaired) {
+        if (hasRealPairing || isTrustedPairEvent) {
           const sessionCode = `SES-${Date.now().toString().slice(-6)}-${rxId}`;
-          // Lookup active assignment for this RX device
           const assignmentRes = await client.query(`
             SELECT u.full_name, u.employee_id 
             FROM device_assignments da
@@ -283,20 +282,14 @@ exports.handler = async (event, context) => {
             empIdNum = assignmentRes.rows[0].employee_id;
           }
 
-          const hasHardwareTarget = Boolean(event.paired_tx_id || event.paired_rx_id || event.paired_device || (selectedTargetId && selectedTargetId > 0));
-
-          if (!hasHardwareTarget) {
-            console.log(`[Lambda] Ignored ghost session: ${rxId} has no explicit hardware target (empName=${empName || 'none'}).`);
-          } else {
-            await client.query(`
-              INSERT INTO shunting_sessions (
-                session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
-                session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
-                minimum_distance, distance_trajectory, employee_name, employee_id_number, created_at, updated_at
-              ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4::numeric, $4::numeric / 100.0, $4::numeric / 100.0, $5::jsonb, $6, $7, NOW(), NOW())
-            `, [sessionCode, rxId, txId, distanceCm, JSON.stringify([JSON.parse(point)]), empName, empIdNum]);
-            console.log(`[Lambda] Auto-created live session: ${rxId} <--> ${txId} for ${empName || 'Unknown'}`);
-          }
+          await client.query(`
+            INSERT INTO shunting_sessions (
+              session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
+              session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
+              minimum_distance, distance_trajectory, employee_name, employee_id_number, created_at, updated_at
+            ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4::numeric, $4::numeric / 100.0, $4::numeric / 100.0, $5::jsonb, $6, $7, NOW(), NOW())
+          `, [sessionCode, rxId, txId, distanceCm, JSON.stringify([JSON.parse(point)]), empName, empIdNum]);
+          console.log(`[Lambda] Auto-created live session: ${rxId} <--> ${txId} for ${empName || 'Unknown'}`);
         }
       }
     }

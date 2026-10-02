@@ -332,12 +332,12 @@ class AwsIotBridge {
               empIdNum = assignmentRes.rows[0].employee_id;
             }
 
-            const readings = payload.readings || {};
-            const selectedTargetId = readings.selected_target_id || payload.selected_target_id;
-            const hasHardwareTarget = Boolean(payload.paired_tx_id || payload.paired_rx_id || payload.paired_device || (selectedTargetId && selectedTargetId > 0));
+            // Only trust explicit pairing fields, NOT selected_target_id (which is a factory default like 11)
+            const hasRealPairing = Boolean(payload.paired_tx_id || payload.paired_rx_id || payload.paired_device);
+            const isTrustedPairEvent = (eventType === 'PAIR_START');
 
-            if (!hasHardwareTarget) {
-              console.log(`[AWS IoT] Ignored ghost session: ${rxId} has no explicit hardware target (empName=${empName || 'none'}).`);
+            if (!hasRealPairing && !isTrustedPairEvent) {
+              console.log(`[AWS IoT] Ignored ghost session: ${rxId} - no real pairing evidence (selected_target_id=${selectedTargetId}, empName=${empName || 'none'}).`);
             } else {
               await db.query(`
                 INSERT INTO shunting_sessions (
@@ -458,12 +458,11 @@ class AwsIotBridge {
 
         // If no active shunting session exists yet, auto-create one when distance streaming begins
         if (updateRes.rowCount === 0) {
-          const readings = payload.readings || {};
-          const selectedTargetId = readings.selected_target_id || payload.selected_target_id;
-          const hasHardwareTarget = Boolean(payload.paired_tx_id || payload.paired_rx_id || payload.paired_device || (selectedTargetId && selectedTargetId > 0));
-          const isExplicitlyPaired = hasHardwareTarget || payload.status === 'PAIRED' || payload.event === 'PAIR_START';
+          // Only trust explicit pairing fields, NOT selected_target_id (factory default)
+          const hasRealPairing = Boolean(payload.paired_tx_id || payload.paired_rx_id || payload.paired_device);
+          const isTrustedPairEvent = (payload.event === 'PAIR_START');
           
-          if (isExplicitlyPaired) {
+          if (hasRealPairing || isTrustedPairEvent) {
             const sessionCode = `SES-${Date.now().toString().slice(-6)}-${rxId}`;
             
             // Lookup active assignment for this RX device
@@ -483,18 +482,14 @@ class AwsIotBridge {
               empIdNum = assignmentRes.rows[0].employee_id;
             }
 
-            if (!hasHardwareTarget) {
-              console.log(`[AWS IoT] Ignored ghost session auto-start: ${rxId} has no explicit hardware target (empName=${empName || 'none'}).`);
-            } else {
-              await db.query(`
-                INSERT INTO shunting_sessions (
-                  session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
-                  session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
-                  minimum_distance, distance_trajectory, employee_name, employee_id_number, created_at, updated_at
-                ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4::numeric, $4::numeric / 100.0, $4::numeric / 100.0, $5::jsonb, $6, $7, NOW(), NOW())
-              `, [sessionCode, rxId, txId, distanceCm, JSON.stringify([JSON.parse(point)]), empName, empIdNum]);
-              console.log(`🚂 [SHUTTLE SESSION AUTO-START] Streaming from ${rxId} <--> ${txId} for ${empName || 'Unknown'}`);
-            }
+            await db.query(`
+              INSERT INTO shunting_sessions (
+                session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
+                session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
+                minimum_distance, distance_trajectory, employee_name, employee_id_number, created_at, updated_at
+              ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4::numeric, $4::numeric / 100.0, $4::numeric / 100.0, $5::jsonb, $6, $7, NOW(), NOW())
+            `, [sessionCode, rxId, txId, distanceCm, JSON.stringify([JSON.parse(point)]), empName, empIdNum]);
+            console.log(`🚂 [SHUTTLE SESSION AUTO-START] Streaming from ${rxId} <--> ${txId} for ${empName || 'Unknown'}`);
           }
         }
       }
