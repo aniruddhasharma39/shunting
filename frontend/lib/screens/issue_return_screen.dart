@@ -14,7 +14,7 @@ class IssueReturnScreen extends StatefulWidget {
 class _IssueReturnScreenState extends State<IssueReturnScreen> {
   bool _isLoading = true;
   List<dynamic> _availableLDs = [];
-  List<dynamic> _activeSessions = [];
+  List<dynamic> _activeAssignments = [];
   List<dynamic> _locoPilots = [];
 
   @override
@@ -35,7 +35,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
         
         // Populate active sessions from issued devices directly!
         // This fixes the bug where devices without telemetry were hidden.
-        _activeSessions = allDevices.where((d) => d['is_issued'] == true).map((d) {
+        _activeAssignments = allDevices.where((d) => d['is_issued'] == true).map((d) {
           return {
             'id': d['active_assignment_id'],
             'ldDevice': d['device_code'] ?? d['device_id'],
@@ -291,7 +291,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
   }
 
   Widget _buildReturnTab() {
-    if (_activeSessions.isEmpty) {
+    if (_activeAssignments.isEmpty) {
        return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: const [
@@ -304,9 +304,9 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16.0),
-      itemCount: _activeSessions.length,
+      itemCount: _activeAssignments.length,
       itemBuilder: (context, index) {
-        final session = _activeSessions[index];
+        final assignment = _activeAssignments[index];
         
         return Card(
           margin: const EdgeInsets.only(bottom: 16.0),
@@ -323,12 +323,12 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                       children: [
                         const Icon(Icons.train, color: AppTheme.primaryColor),
                         const SizedBox(width: 8),
-                        Text(session['ldDevice'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.primaryColor)),
+                        Text(assignment['ldDevice'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.primaryColor)),
                       ],
                     ),
                     Flexible(
                       child: Text(
-                        "SES-${session['id'].toString().length > 8 ? session['id'].toString().substring(0, 8) : session['id']}", 
+                        "ASN-${assignment['id'].toString().length > 8 ? assignment['id'].toString().substring(0, 8) : assignment['id']}", 
                         style: const TextStyle(color: AppTheme.subtitleColor, fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.right,
@@ -344,14 +344,14 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text('Issued To', style: TextStyle(fontSize: 12, color: AppTheme.subtitleColor)),
-                        Text(session['holder'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text(assignment['holder'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold)),
                       ],
                     ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         const Text('Issued At', style: TextStyle(fontSize: 12, color: AppTheme.subtitleColor)),
-                        Text(_formatTime(session['startTime']), style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text(_formatTime(assignment['startTime']), style: const TextStyle(fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ],
@@ -360,7 +360,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () => _showReturnDialog(session),
+                    onPressed: () => _showReturnDialog(assignment),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: AppTheme.primaryColor,
@@ -378,7 +378,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
     );
   }
 
-  void _showReturnDialog(dynamic session) {
+  void _showReturnDialog(dynamic assignment) {
     final remarksController = TextEditingController();
     bool isSubmitting = false;
     
@@ -392,7 +392,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (dialogCtx, setDialogState) {
           return AlertDialog(
-            title: Text("Return ${session['ldDevice']}?"),
+            title: Text("Return ${assignment['ldDevice']}?"),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -416,7 +416,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                 onPressed: isSubmitting ? null : () async {
                   setDialogState(() => isSubmitting = true);
                   
-                  final result = await ApiService.returnDevice(session['id'].toString(), remarksController.text);
+                  final result = await ApiService.returnDevice(assignment['id'].toString(), remarksController.text);
                   if (mounted) {
                      if (result['success']) {
                         Navigator.pop(context);
