@@ -281,14 +281,39 @@ const returnDevice = async (req, res) => {
     );
 
     if (returned.rows.length > 0) {
+      const deviceId = returned.rows[0].device_id;
+
+      // Get the device_code so we can match it against session fields
+      const deviceRes = await db.query(
+        'SELECT device_code FROM devices WHERE id = $1',
+        [deviceId]
+      );
+      const deviceCode = deviceRes.rows[0]?.device_code;
+
+      // Close any active LIVE sessions involving this device
+      if (deviceCode) {
+        await db.query(`
+          UPDATE shunting_sessions
+          SET 
+            session_end = NOW(),
+            end_time = NOW(),
+            session_status = 'COMPLETED',
+            status = 'COMPLETED',
+            manual_close_reason = 'Device Returned',
+            updated_at = NOW()
+          WHERE (rx_device_id = $1 OR ld_code = $1 OR tx_device_id = $1 OR de_code = $1)
+            AND (status = 'LIVE' OR session_status = 'LIVE')
+        `, [deviceCode]);
+      }
+
       // Clear line assignment
       await db.query(
         'UPDATE devices SET assigned_line_id = NULL WHERE id = $1',
-        [returned.rows[0].device_id]
+        [deviceId]
       );
       await db.query(
         'UPDATE device_registry SET assigned_line_id = NULL WHERE id = $1',
-        [returned.rows[0].device_id]
+        [deviceId]
       );
     }
 
