@@ -396,7 +396,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Process the return of this device and end the active shunting session.'),
+                const Text('Process the return of this device.'),
                 const SizedBox(height: 16),
                 TextField(
                   controller: remarksController,

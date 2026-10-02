@@ -290,7 +290,8 @@ const returnDevice = async (req, res) => {
       );
       const deviceCode = deviceRes.rows[0]?.device_code;
 
-      // Close any active LIVE sessions involving this device
+      // Close any active LIVE sessions involving this device (REMOVED - no longer related to sessions)
+      /*
       if (deviceCode) {
         await db.query(`
           UPDATE shunting_sessions
@@ -305,6 +306,7 @@ const returnDevice = async (req, res) => {
             AND (status = 'LIVE' OR session_status = 'LIVE')
         `, [deviceCode]);
       }
+      */
 
       // Clear line assignment
       await db.query(

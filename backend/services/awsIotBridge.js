@@ -377,6 +377,8 @@ class AwsIotBridge {
             WHERE (rx_device_id = $3 OR ld_code = $3 OR tx_device_id = $4 OR de_code = $4) AND (status = 'LIVE' OR session_status = 'LIVE')
           `, [finalVal, finalMeters, rxId, txId]);
 
+          // Auto-returning device when session ends is REMOVED as they are separate
+          /*
           try {
             await db.query(`
               UPDATE device_assignments
@@ -384,6 +386,7 @@ class AwsIotBridge {
               WHERE device_id IN (SELECT id FROM devices WHERE device_code = $1 OR device_code = $2) AND returned_at IS NULL
             `, [rxId, txId]);
           } catch (_) {}
+          */
 
           console.log(`🛑 [SHUTTLE SESSION END] Hardware Unpaired: ${rxId} / ${txId} (Final Distance: ${finalVal} cm)`);
         }
@@ -401,6 +404,8 @@ class AwsIotBridge {
             WHERE (rx_device_id = $1 OR ld_code = $1 OR tx_device_id = $2 OR de_code = $2) AND (status = 'LIVE' OR session_status = 'LIVE')
           `, [rxId, txId]);
 
+          // Auto-returning device when session ends is REMOVED as they are separate
+          /*
           try {
             await db.query(`
               UPDATE device_assignments
@@ -408,6 +413,7 @@ class AwsIotBridge {
               WHERE device_id IN (SELECT id FROM devices WHERE device_code = $1 OR device_code = $2) AND returned_at IS NULL
             `, [rxId, txId]);
           } catch (_) {}
+          */
 
           console.log(`⚠️ [SHUTTLE SESSION TIMEOUT] LWT Disconnect for: ${rxId} / ${txId}`);
         }
