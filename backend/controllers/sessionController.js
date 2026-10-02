@@ -506,8 +506,22 @@ const getSessionsForRangeReport = async (req, res) => {
   }
 };
 
+const cleanGhostSessions = async (req, res) => {
+  try {
+    const result = await db.query(`
+      DELETE FROM shunting_sessions 
+      WHERE (final_distance_cm IS NULL OR distance_trajectory = '[]'::jsonb)
+    `);
+    res.json({ success: true, deleted: result.rowCount, message: 'Fake sessions cleaned up successfully' });
+  } catch (error) {
+    console.error('Error in cleanGhostSessions:', error);
+    res.status(500).json({ success: false, message: 'Server error cleaning sessions' });
+  }
+};
+
 module.exports = {
   getSessions,
   getSessionDetailsWithLogs,
-  getSessionsForRangeReport
+  getSessionsForRangeReport,
+  cleanGhostSessions
 };
