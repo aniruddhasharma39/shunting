@@ -29,12 +29,11 @@ const getDashboardSummary = async (req, res) => {
     const activeDevices = countRes.rows[0]?.active_devices || 0;
     const offlineDevices = countRes.rows[0]?.offline_devices || 0;
 
-    // 2. Total Sessions Today (from both shunting_sessions and device_assignments)
+    // 2. Total Sessions Today (strictly from hardware shunting_sessions, completely decoupled from assignments)
     const sessionsRes = await db.query(`
-      SELECT (
-        (SELECT COUNT(*)::int FROM shunting_sessions WHERE DATE(COALESCE(start_time, session_start, created_at)) = CURRENT_DATE) +
-        (SELECT COUNT(*)::int FROM device_assignments WHERE DATE(issued_at) = CURRENT_DATE)
-      ) AS count
+      SELECT COUNT(*)::int AS count 
+      FROM shunting_sessions 
+      WHERE DATE(COALESCE(start_time, session_start, created_at)) = CURRENT_DATE
     `);
     const totalSessionsToday = sessionsRes.rows[0]?.count || 0;
 
