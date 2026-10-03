@@ -30,10 +30,12 @@ const getDashboardSummary = async (req, res) => {
     const offlineDevices = countRes.rows[0]?.offline_devices || 0;
 
     // 2. Total Sessions Today (strictly from hardware shunting_sessions, completely decoupled from assignments)
+    // Exclude ghost/fake sessions (ones without distance data)
     const sessionsRes = await db.query(`
       SELECT COUNT(*)::int AS count 
       FROM shunting_sessions 
       WHERE DATE(COALESCE(start_time, session_start, created_at)) = CURRENT_DATE
+        AND NOT (final_distance_cm IS NULL AND (distance_trajectory IS NULL OR distance_trajectory = '[]'::jsonb))
     `);
     const totalSessionsToday = sessionsRes.rows[0]?.count || 0;
 

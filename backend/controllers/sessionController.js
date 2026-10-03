@@ -63,9 +63,12 @@ const getSessions = async (req, res) => {
     if (isLiveRequested) {
       ssQuery += ` WHERE (ss.status = 'LIVE' OR ss.session_status = 'LIVE') AND ss.updated_at >= (NOW() - INTERVAL '60 SECONDS') ORDER BY ss.updated_at DESC`;
     } else if (status === 'history') {
-      ssQuery += ` WHERE (ss.status != 'LIVE' AND ss.session_status != 'LIVE') OR ss.updated_at < (NOW() - INTERVAL '60 SECONDS') ORDER BY COALESCE(ss.end_time, ss.session_end, ss.updated_at) DESC LIMIT 50`;
+      ssQuery += ` WHERE ((ss.status != 'LIVE' AND ss.session_status != 'LIVE') OR ss.updated_at < (NOW() - INTERVAL '60 SECONDS'))
+                   AND NOT (ss.final_distance_cm IS NULL AND (ss.distance_trajectory IS NULL OR ss.distance_trajectory = '[]'::jsonb))
+                   ORDER BY COALESCE(ss.end_time, ss.session_end, ss.updated_at) DESC LIMIT 50`;
     } else {
-      ssQuery += ` ORDER BY ss.created_at DESC LIMIT 50`;
+      ssQuery += ` WHERE NOT (ss.final_distance_cm IS NULL AND (ss.distance_trajectory IS NULL OR ss.distance_trajectory = '[]'::jsonb))
+                   ORDER BY ss.created_at DESC LIMIT 50`;
     }
 
     const ssRes = await db.query(ssQuery);
