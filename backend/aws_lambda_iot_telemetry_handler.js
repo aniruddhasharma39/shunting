@@ -190,15 +190,26 @@ exports.handler = async (event, context) => {
               console.error("[Lambda] Failed to fetch Loco Pilot assignment:", err.message);
             }
 
-            // 2. Insert session with Loco Pilot details
+            // 2. Generate Session Number: S-YYYYMMDD0001
+            let sessionNum = 'S-UNKNOWN';
+            try {
+              const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+              const countRes = await client.query(`SELECT COUNT(*) FROM shunting_sessions WHERE session_number LIKE $1`, [`S-${todayStr}%`]);
+              const count = parseInt(countRes.rows[0].count, 10) + 1;
+              sessionNum = `S-${todayStr}${String(count).padStart(4, '0')}`;
+            } catch (err) {
+              console.error("[Lambda] Failed to generate session number:", err.message);
+            }
+
+            // 3. Insert session with Loco Pilot details & Session Number
             await client.query(`
               INSERT INTO shunting_sessions (
-                ld_code, rx_device_id, de_code, tx_device_id,
+                session_number, ld_code, rx_device_id, de_code, tx_device_id,
                 employee_name, employee_id_number, yard_id, line_id,
                 session_start, start_time, session_status, status, distance_trajectory, created_at, updated_at
-              ) VALUES ($1, $1, $2, $2, $3, $4, $5, $6, NOW(), NOW(), 'LIVE', 'LIVE', '[]'::jsonb, NOW(), NOW())
-            `, [rxId, txId, empName, empIdNum, yardId, lineId]);
-            console.log(`[Lambda] Session Started: ${rxId} <--> ${txId} (Pilot: ${empName || 'Unassigned'})`);
+              ) VALUES ($1, $2, $2, $3, $3, $4, $5, $6, $7, NOW(), NOW(), 'LIVE', 'LIVE', '[]'::jsonb, NOW(), NOW())
+            `, [sessionNum, rxId, txId, empName, empIdNum, yardId, lineId]);
+            console.log(`[Lambda] Session Started: ${sessionNum} Paired: ${rxId} <--> ${txId} (Pilot: ${empName || 'Unassigned'})`);
           }
         }
       } else if (eventType === 'PAIR_END' || status === 'IDLE') {
