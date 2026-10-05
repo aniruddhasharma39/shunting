@@ -160,13 +160,45 @@ exports.handler = async (event, context) => {
           if (!hasRealPairing && !isTrustedPairEvent) {
             console.log(`[Lambda] Ignored ghost session: ${rxId} - no real pairing evidence.`);
           } else {
+            // 1. Fetch active Loco Pilot assignment for this device
+            let empName = null;
+            let empIdNum = null;
+            let yardId = null;
+            let lineId = null;
+
+            try {
+              const activeAssignment = await client.query(`
+                SELECT 
+                  d.yard_id, 
+                  d.assigned_line_id, 
+                  u.full_name, 
+                  u.employee_id
+                FROM devices d
+                LEFT JOIN device_assignments da ON d.id = da.device_id AND da.returned_at IS NULL
+                LEFT JOIN users u ON da.employee_id = u.id
+                WHERE d.device_code = $1 OR d.id::text = $1
+                ORDER BY da.issued_at DESC LIMIT 1
+              `, [rxId]);
+
+              if (activeAssignment.rows.length > 0) {
+                yardId = activeAssignment.rows[0].yard_id;
+                lineId = activeAssignment.rows[0].assigned_line_id;
+                empName = activeAssignment.rows[0].full_name;
+                empIdNum = activeAssignment.rows[0].employee_id;
+              }
+            } catch (err) {
+              console.error("[Lambda] Failed to fetch Loco Pilot assignment:", err.message);
+            }
+
+            // 2. Insert session with Loco Pilot details
             await client.query(`
               INSERT INTO shunting_sessions (
                 ld_code, rx_device_id, de_code, tx_device_id,
+                employee_name, employee_id_number, yard_id, line_id,
                 session_start, start_time, session_status, status, distance_trajectory, created_at, updated_at
-              ) VALUES ($1, $1, $2, $2, NOW(), NOW(), 'LIVE', 'LIVE', '[]'::jsonb, NOW(), NOW())
-            `, [rxId, txId]);
-            console.log(`[Lambda] Session Started: ${rxId} <--> ${txId}`);
+              ) VALUES ($1, $1, $2, $2, $3, $4, $5, $6, NOW(), NOW(), 'LIVE', 'LIVE', '[]'::jsonb, NOW(), NOW())
+            `, [rxId, txId, empName, empIdNum, yardId, lineId]);
+            console.log(`[Lambda] Session Started: ${rxId} <--> ${txId} (Pilot: ${empName || 'Unassigned'})`);
           }
         }
       } else if (eventType === 'PAIR_END' || status === 'IDLE') {

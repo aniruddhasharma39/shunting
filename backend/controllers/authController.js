@@ -8,8 +8,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'safeshunt_default_secret_key_chang
 const designationToRole = {
   'Super Administrator': 'super_admin',
   'Yard Administrator': 'yard_admin',
-  'Maintenance User': 'maintenance_user',
   'Hardware Engineer': 'hardware_engineer',
+  'Maintenance User': 'maintenance_user',
+  'Loco Pilot': 'loco_pilot',
   'Viewer / Control Room User': 'viewer',
 };
 
@@ -61,7 +62,7 @@ exports.register = async (req, res) => {
             isActive = true;
           }
           
-          if (decoded.role === 'yard_admin' && !['Maintenance User', 'Viewer / Control Room User'].includes(designation)) {
+          if (decoded.role === 'yard_admin' && !['Maintenance User', 'Viewer / Control Room User', 'Loco Pilot'].includes(designation)) {
             return res.status(403).json({ message: 'Forbidden: You do not have permission to create this role.' });
           }
         } catch (err) {
@@ -220,7 +221,7 @@ exports.listUsers = async (req, res) => {
     let params = [];
     
     if (req.user.role === 'yard_admin') {
-      query += ` WHERE role IN ('maintenance_user', 'viewer')`;
+      query += ` WHERE role IN ('maintenance_user', 'viewer', 'loco_pilot')`;
     }
     
     query += ` ORDER BY created_at DESC`;
@@ -265,7 +266,7 @@ exports.toggleUserActive = async (req, res) => {
     if (req.user.role === 'yard_admin') {
       const targetUserCheck = await db.query('SELECT role FROM users WHERE id = $1', [id]);
       if (targetUserCheck.rows.length === 0) return res.status(404).json({ message: 'User not found' });
-      if (!['maintenance_user', 'viewer'].includes(targetUserCheck.rows[0].role)) {
+      if (!['maintenance_user', 'viewer', 'loco_pilot'].includes(targetUserCheck.rows[0].role)) {
         return res.status(403).json({ message: 'Forbidden: You do not have permission to manage this user role.' });
       }
     }
@@ -304,7 +305,7 @@ exports.deleteUser = async (req, res) => {
     if (req.user.role === 'yard_admin') {
       const targetUserCheck = await db.query('SELECT role FROM users WHERE id = $1', [id]);
       if (targetUserCheck.rows.length === 0) return res.status(404).json({ message: 'User not found' });
-      if (!['maintenance_user', 'viewer'].includes(targetUserCheck.rows[0].role)) {
+      if (!['maintenance_user', 'viewer', 'loco_pilot'].includes(targetUserCheck.rows[0].role)) {
         return res.status(403).json({ message: 'Forbidden: You do not have permission to manage this user role.' });
       }
     }

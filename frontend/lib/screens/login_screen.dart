@@ -74,133 +74,131 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: Row(
-          children: const [
-            Icon(Icons.directions_railway, color: AppTheme.primaryColor),
-            SizedBox(width: 8),
-            Text('SafeShunt'),
-          ],
+      backgroundColor: Colors.transparent,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppTheme.primaryColor,
+              AppTheme.backgroundColor,
+            ],
+            stops: const [0.0, 1.0], // Perfectly smooth gradient stretching to the bottom
+          ),
         ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1.0),
-          child: Container(color: AppTheme.borderColor, height: 1.0),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
-        child: Column(
-          children: [
-            // Logo Icon Placeholder
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                color: AppTheme.primaryColor,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.primaryColor.withAlpha(80),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: const Icon(Icons.shield_outlined, color: Colors.white, size: 64),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Shunting Safety',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.primaryColor),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Secure Personnel Authentication',
-              style: TextStyle(color: AppTheme.subtitleColor, fontSize: 14),
-            ),
-            const SizedBox(height: 32),
-            
-            // Login Card
-            Container(
-              padding: const EdgeInsets.all(24.0),
-              decoration: BoxDecoration(
-                color: AppTheme.cardColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.borderColor),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Employee ID / Email', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.subtitleColor)),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _employeeIdController,
-                    decoration: const InputDecoration(
-                      hintText: 'EMP-001 or name@email.com',
-                      prefixIcon: Icon(Icons.badge_outlined),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 450), // Responsive constraint for web/desktop
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // SafeShunt Text Logo centered at the top
+                    Image.asset(
+                      'safeshunt_rail_logo.png',
+                      height: 56,
+                      fit: BoxFit.contain,
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text('Password', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.subtitleColor)),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    decoration: InputDecoration(
-                      hintText: '••••••••',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
+                    const SizedBox(height: 32),
+                    
+                    // Unified Login Card (Image Top, Form Bottom)
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.cardColor,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withAlpha(30),
+                            blurRadius: 24,
+                            spreadRadius: 4,
+                            offset: const Offset(0, 12),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          // Top Banner Image (Fused to the card)
+                          ClipRRect(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                            child: Image.asset(
+                              'login_page_image.png',
+                              height: 160,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              alignment: Alignment.center,
+                            ),
+                          ),
+                          
+                          // Login Content
+                          Padding(
+                            padding: const EdgeInsets.all(32.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Employee ID / Email', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.subtitleColor)),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: _employeeIdController,
+                                  decoration: const InputDecoration(
+                                    hintText: 'EMP-001 or name@email.com',
+                                    prefixIcon: Icon(Icons.badge_outlined),
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                const Text('Password', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.subtitleColor)),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: _passwordController,
+                                  obscureText: _obscurePassword,
+                                  decoration: InputDecoration(
+                                    hintText: '••••••••',
+                                    prefixIcon: const Icon(Icons.lock_outline),
+                                    suffixIcon: IconButton(
+                                      icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                                      onPressed: () {
+                                        setState(() {
+                                          _obscurePassword = !_obscurePassword;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 32),
+                                ElevatedButton(
+                                  onPressed: _isLoading ? null : _handleLogin,
+                                  child: _isLoading 
+                                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                    : const Text('LOGIN'),
+                                ),
+                                const SizedBox(height: 16),
+                                Center(
+                                  child: TextButton(
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(builder: (context) => const RegistrationScreen()),
+                                      );
+                                    },
+                                    child: const Text('Need an account? Register', style: TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w600)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _handleLogin,
-                    child: _isLoading 
-                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text('LOGIN'),
-                  ),
-                  const SizedBox(height: 16),
-                  Center(
-                    child: TextButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const RegistrationScreen()),
-                        );
-                      },
-                      child: const Text('Need an account? Register', style: TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w600)),
-                    ),
-                  )
-                ],
+                  ],
+                ),
               ),
             ),
-            
-            const SizedBox(height: 32),
-            
-            // Footer
-            Wrap(
-              alignment: WrapAlignment.center,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: const [
-                Text('System v2.4.1', style: TextStyle(fontSize: 12, color: AppTheme.subtitleColor)),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8.0),
-                  child: Text('|', style: TextStyle(color: AppTheme.borderColor)),
-                ),
-                Text('App Version 1.0', style: TextStyle(fontSize: 12, color: AppTheme.subtitleColor)),
-              ],
-            ),
-            const SizedBox(height: 32),
-          ],
+          ),
         ),
       ),
     );

@@ -57,7 +57,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
       
       if (usersResult['success']) {
         final allUsers = usersResult['data'] as List<dynamic>;
-        _locoPilots = allUsers.where((u) => u['role'] == 'viewer' || u['role'] == 'yard_admin' || u['role'] == 'maintenance_user' || u['role'] == 'hardware_engineer').toList();
+        _locoPilots = allUsers.where((u) => u['role'] == 'loco_pilot').toList();
       }
 
       setState(() => _isLoading = false);

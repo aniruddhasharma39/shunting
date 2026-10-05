@@ -26,6 +26,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     final role = UserSession().role;
     if (widget.isAdminCreatingUser && role == 'yard_admin') {
       return [
+        'Loco Pilot',
         'Maintenance User',
         'Viewer / Control Room User'
       ];
@@ -35,6 +36,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       'Yard Administrator',
       'Hardware Engineer',
       'Maintenance User',
+      'Loco Pilot',
       'Viewer / Control Room User'
     ];
   }

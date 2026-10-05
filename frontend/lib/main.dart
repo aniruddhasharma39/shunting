@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 import 'theme/app_theme.dart';
 import 'services/user_session.dart';
 import 'screens/login_screen.dart';
@@ -11,12 +12,6 @@ void main() {
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
-  Future<bool> _initializeSession() async {
-    // Add a slight delay for splash screen visibility and smooth transition
-    await Future.delayed(const Duration(milliseconds: 800));
-    return await UserSession().loadFromPreferences();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,66 +26,96 @@ class MyApp extends StatelessWidget {
           child: child ?? const SizedBox.shrink(),
         );
       },
-      home: FutureBuilder<bool>(
-        future: _initializeSession(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const SplashScreen();
-          }
-          final isLoggedIn = snapshot.data ?? false;
-          return isLoggedIn ? const MainScreen() : const LoginScreen();
-        },
-      ),
+      home: const VideoSplashScreen(),
     );
   }
 }
 
-class SplashScreen extends StatelessWidget {
-  const SplashScreen({super.key});
+class VideoSplashScreen extends StatefulWidget {
+  const VideoSplashScreen({super.key});
+
+  @override
+  State<VideoSplashScreen> createState() => _VideoSplashScreenState();
+}
+
+class _VideoSplashScreenState extends State<VideoSplashScreen> {
+  late VideoPlayerController _controller;
+  bool _hasNavigated = false;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // Start video and session check simultaneously
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    // 1. Initialize and play the video
+    _controller = VideoPlayerController.asset('Splash_screen.mp4');
+    try {
+      await _controller.initialize();
+      _controller.setVolume(0.0);
+      if (mounted) setState(() {});
+      _controller.play();
+    } catch (e) {
+      // Ignore video errors and proceed to load
+    }
+
+    // 2. Run backend session load
+    // We add a tiny 1.5s minimum delay so the video actually has time to show on screen
+    // otherwise it would flash for 0.01 seconds and disappear instantly!
+    final results = await Future.wait([
+      UserSession().loadFromPreferences(),
+      Future.delayed(const Duration(milliseconds: 1500)),
+    ]);
+    
+    final bool isLoggedIn = results[0] as bool;
+
+    // 3. Skip directly to the appropriate screen without waiting for the full video!
+    if (mounted && !_hasNavigated) {
+      _hasNavigated = true;
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => 
+              isLoggedIn ? const MainScreen() : const LoginScreen(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 500),
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                color: AppTheme.primaryColor,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.primaryColor.withAlpha(80),
-                    blurRadius: 30,
-                    spreadRadius: 5,
-                  ),
-                ],
+      backgroundColor: AppTheme.primaryColor, // Navy blue instead of black
+      body: SizedBox.expand(
+        child: _controller.value.isInitialized
+            ? FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _controller.value.size.width,
+                  height: _controller.value.size.height,
+                  child: VideoPlayer(_controller),
+                ),
+              )
+            : Center(
+                child: Image.asset(
+                  'safeshunt_rail_logo.png',
+                  height: 64,
+                  fit: BoxFit.contain,
+                ),
               ),
-              child: const Icon(Icons.shield_outlined, color: Colors.white, size: 64),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'SafeShunt',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.primaryColor,
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Initializing System...',
-              style: TextStyle(color: AppTheme.subtitleColor, fontSize: 14),
-            ),
-            const SizedBox(height: 48),
-            const CircularProgressIndicator(color: AppTheme.primaryColor),
-          ],
-        ),
       ),
     );
   }

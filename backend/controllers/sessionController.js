@@ -4,11 +4,19 @@ const awsIotBridge = require('../services/awsIotBridge');
 const getFilterOptions = async (req, res) => {
   try {
     const yardRes = await db.query(`SELECT yard_name FROM yards ORDER BY yard_name ASC`);
-    const pilotRes = await db.query(`SELECT DISTINCT employee_name FROM shunting_sessions WHERE employee_name IS NOT NULL ORDER BY employee_name ASC`);
+    const pilotRes = await db.query(`
+      SELECT DISTINCT name FROM (
+        SELECT employee_name as name FROM shunting_sessions WHERE employee_name IS NOT NULL
+        UNION
+        SELECT full_name as name FROM users WHERE designation ILIKE '%Pilot%'
+      ) AS combined
+      WHERE name IS NOT NULL
+      ORDER BY name ASC
+    `);
     
     res.json({
       yards: yardRes.rows.map(r => r.yard_name),
-      pilots: pilotRes.rows.map(r => r.employee_name)
+      pilots: pilotRes.rows.map(r => r.name)
     });
   } catch (error) {
     console.error('Error in getFilterOptions:', error);
