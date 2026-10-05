@@ -29,6 +29,9 @@ class _SessionsScreenState extends State<SessionsScreen> {
 
   List<dynamic> _historySessions = [];
   List<dynamic> _filteredHistorySessions = [];
+  
+  List<String> _availableYards = [];
+  List<String> _availablePilots = [];
 
   // Filter State
   DateTimeRange? _filterDateRange;
@@ -139,7 +142,18 @@ class _SessionsScreenState extends State<SessionsScreen> {
 
   Future<void> _fetchData() async {
     _fetchLiveSessions();
+    _fetchFilterOptions();
     _fetchHistorySessions();
+  }
+
+  Future<void> _fetchFilterOptions() async {
+    final result = await ApiService.fetchSessionFilterOptions();
+    if (mounted && result['success']) {
+      setState(() {
+        _availableYards = List<String>.from(result['data']['yards'] ?? []);
+        _availablePilots = List<String>.from(result['data']['pilots'] ?? []);
+      });
+    }
   }
 
   Future<void> _fetchLiveSessions({bool silent = false}) async {
@@ -171,7 +185,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
 
   Future<void> _fetchHistorySessions() async {
     setState(() => _isLoadingHistory = true);
-    final result = await ApiService.fetchSessions(status: 'history');
+    final result = await ApiService.fetchSessions(status: 'history', yard: _filterYard, pilot: _filterPilot);
     if (mounted) {
       if (result['success']) {
         final newHistory = result['data'] ?? [];
@@ -772,8 +786,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
   }
 
   void _showAdvancedFilterSheet() {
-    final yards = _historySessions.map((s) => (s['yard'] ?? s['yard_name'])?.toString()).where((s) => s != null && s.isNotEmpty).toSet().toList();
-    final pilots = _historySessions.map((s) => (s['holder'] ?? s['employee_name'])?.toString()).where((s) => s != null && s.isNotEmpty).toSet().toList();
+    final yards = _availableYards;
+    final pilots = _availablePilots;
 
     showModalBottomSheet(
       context: context,
@@ -923,7 +937,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                         ),
                         onPressed: () {
                           setState(() {});
-                          _applyFilters();
+                          _fetchHistorySessions();
                           Navigator.pop(ctx);
                         },
                         child: const Text('Apply Filters', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),

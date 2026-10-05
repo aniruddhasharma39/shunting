@@ -1,12 +1,27 @@
 const db = require('../config/db');
 const awsIotBridge = require('../services/awsIotBridge');
 
+const getFilterOptions = async (req, res) => {
+  try {
+    const yardRes = await db.query(`SELECT yard_name FROM yards ORDER BY yard_name ASC`);
+    const pilotRes = await db.query(`SELECT DISTINCT employee_name FROM shunting_sessions WHERE employee_name IS NOT NULL ORDER BY employee_name ASC`);
+    
+    res.json({
+      yards: yardRes.rows.map(r => r.yard_name),
+      pilots: pilotRes.rows.map(r => r.employee_name)
+    });
+  } catch (error) {
+    console.error('Error in getFilterOptions:', error);
+    res.status(500).json({ message: 'Server error fetching filter options' });
+  }
+};
+
 // @desc    Get all sessions (active and history) with paired device telemetry
 // @route   GET /api/sessions
 // @access  Private
 const getSessions = async (req, res) => {
   try {
-    const { status } = req.query; // 'live' or 'history'
+    const { status, yard, pilot } = req.query; // 'live' or 'history'
     const isLiveRequested = status === 'live';
 
     // Auto-sweep stale live sessions before querying
@@ -60,18 +75,44 @@ const getSessions = async (req, res) => {
       LEFT JOIN yards y ON ss.yard_id = y.id
     `;
 
+    let ssWhere = [];
+    let ssParams = [];
+    let paramIndex = 1;
+
     if (isLiveRequested) {
-      ssQuery += ` WHERE (ss.status = 'LIVE' OR ss.session_status = 'LIVE') AND ss.updated_at >= (NOW() - INTERVAL '60 SECONDS') ORDER BY ss.updated_at DESC`;
+      ssWhere.push(`(ss.status = 'LIVE' OR ss.session_status = 'LIVE') AND ss.updated_at >= (NOW() - INTERVAL '60 SECONDS')`);
     } else if (status === 'history') {
-      ssQuery += ` WHERE ((ss.status != 'LIVE' AND ss.session_status != 'LIVE') OR ss.updated_at < (NOW() - INTERVAL '60 SECONDS'))
-                   AND NOT (ss.final_distance_cm IS NULL AND (ss.distance_trajectory IS NULL OR ss.distance_trajectory = '[]'::jsonb))
-                   ORDER BY COALESCE(ss.end_time, ss.session_end, ss.updated_at) DESC LIMIT 50`;
+      ssWhere.push(`((ss.status != 'LIVE' AND ss.session_status != 'LIVE') OR ss.updated_at < (NOW() - INTERVAL '60 SECONDS'))`);
+      ssWhere.push(`NOT (ss.final_distance_cm IS NULL AND (ss.distance_trajectory IS NULL OR ss.distance_trajectory = '[]'::jsonb))`);
     } else {
-      ssQuery += ` WHERE NOT (ss.final_distance_cm IS NULL AND (ss.distance_trajectory IS NULL OR ss.distance_trajectory = '[]'::jsonb))
-                   ORDER BY ss.created_at DESC LIMIT 50`;
+      ssWhere.push(`NOT (ss.final_distance_cm IS NULL AND (ss.distance_trajectory IS NULL OR ss.distance_trajectory = '[]'::jsonb))`);
     }
 
-    const ssRes = await db.query(ssQuery);
+    if (yard) {
+      ssWhere.push(`(y.yard_name ILIKE $${paramIndex} OR y.yard_code ILIKE $${paramIndex})`);
+      ssParams.push(`%${yard}%`);
+      paramIndex++;
+    }
+
+    if (pilot) {
+      ssWhere.push(`(ss.employee_name ILIKE $${paramIndex})`);
+      ssParams.push(`%${pilot}%`);
+      paramIndex++;
+    }
+
+    if (ssWhere.length > 0) {
+      ssQuery += ` WHERE ` + ssWhere.join(' AND ');
+    }
+
+    if (isLiveRequested) {
+      ssQuery += ` ORDER BY ss.updated_at DESC`;
+    } else if (status === 'history') {
+      ssQuery += ` ORDER BY COALESCE(ss.end_time, ss.session_end, ss.updated_at) DESC LIMIT 50`;
+    } else {
+      ssQuery += ` ORDER BY ss.created_at DESC LIMIT 50`;
+    }
+
+    const ssRes = await db.query(ssQuery, ssParams);
 
     for (const s of ssRes.rows) {
       // Skip sessions with device IDs that don't exist in device_registry
@@ -526,5 +567,6 @@ module.exports = {
   getSessions,
   getSessionDetailsWithLogs,
   getSessionsForRangeReport,
-  cleanGhostSessions
+  cleanGhostSessions,
+  getFilterOptions
 };

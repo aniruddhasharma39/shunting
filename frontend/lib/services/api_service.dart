@@ -490,12 +490,27 @@ class ApiService {
   }
 
   // SESSIONS
-  static Future<Map<String, dynamic>> fetchSessions({String status = 'live'}) async {
+  static Future<Map<String, dynamic>> fetchSessions({String status = 'live', String? yard, String? pilot}) async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/sessions?status=$status'), headers: _authHeaders());
+      String query = 'status=$status';
+      if (yard != null && yard.isNotEmpty) query += '&yard=${Uri.encodeComponent(yard)}';
+      if (pilot != null && pilot.isNotEmpty) query += '&pilot=${Uri.encodeComponent(pilot)}';
+      
+      final response = await http.get(Uri.parse('$baseUrl/sessions?$query'), headers: _authHeaders());
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) return {'success': true, 'data': data};
       return {'success': false, 'message': data['message'] ?? 'Failed to load sessions'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error.'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> fetchSessionFilterOptions() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/sessions/filters/options'), headers: _authHeaders());
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) return {'success': true, 'data': data};
+      return {'success': false, 'message': data['message'] ?? 'Failed to load filter options'};
     } catch (e) {
       return {'success': false, 'message': 'Network error.'};
     }

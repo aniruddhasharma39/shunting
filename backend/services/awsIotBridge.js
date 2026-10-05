@@ -307,8 +307,6 @@ class AwsIotBridge {
         const finalDistCm = payload.final_distance_cm;
 
         if (eventType === 'PAIR_START' || status === 'PAIRED') {
-          const sessionCode = `SES-${Date.now().toString().slice(-6)}-${rxId}`;
-          
           const existing = await db.query(
             "SELECT id FROM shunting_sessions WHERE (rx_device_id = $1 OR ld_code = $1) AND (status = 'LIVE' OR session_status = 'LIVE')",
             [rxId]
@@ -324,10 +322,10 @@ class AwsIotBridge {
             } else {
               await db.query(`
                 INSERT INTO shunting_sessions (
-                  session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
+                  ld_code, rx_device_id, de_code, tx_device_id,
                   session_start, start_time, session_status, status, distance_trajectory, created_at, updated_at
-                ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', '[]'::jsonb, NOW(), NOW())
-              `, [sessionCode, rxId, txId]);
+                ) VALUES ($1, $1, $2, $2, NOW(), NOW(), 'LIVE', 'LIVE', '[]'::jsonb, NOW(), NOW())
+              `, [rxId, txId]);
               console.log(`🚂 [SHUTTLE SESSION START] Hardware Paired: ${rxId} <--> ${txId}`);
             }
           } else if (lastDistCm != null) {
@@ -452,15 +450,13 @@ class AwsIotBridge {
           const isTrustedPairEvent = (payload.event === 'PAIR_START');
           
           if (hasRealPairing || isTrustedPairEvent) {
-            const sessionCode = `SES-${Date.now().toString().slice(-6)}-${rxId}`;
-            
             await db.query(`
               INSERT INTO shunting_sessions (
-                session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
+                ld_code, rx_device_id, de_code, tx_device_id,
                 session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
                 minimum_distance, distance_trajectory, created_at, updated_at
-              ) VALUES ($1, $1, $2, $2, $3, $3, NOW(), NOW(), 'LIVE', 'LIVE', $4::numeric, $4::numeric / 100.0, $4::numeric / 100.0, $5::jsonb, NOW(), NOW())
-            `, [sessionCode, rxId, txId, distanceCm, JSON.stringify([JSON.parse(point)])]);
+              ) VALUES ($1, $1, $2, $2, NOW(), NOW(), 'LIVE', 'LIVE', $3::numeric, $3::numeric / 100.0, $3::numeric / 100.0, $4::jsonb, NOW(), NOW())
+            `, [rxId, txId, distanceCm, JSON.stringify([JSON.parse(point)])]);
             console.log(`🚂 [SHUTTLE SESSION AUTO-START] Streaming from ${rxId} <--> ${txId}`);
           }
         }

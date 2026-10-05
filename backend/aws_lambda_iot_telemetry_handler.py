@@ -157,13 +157,12 @@ def lambda_handler(event, context):
                 )
                 existing = cur.fetchall()
                 if not existing:
-                    session_code = f"SES-{str(int(time.time()))[-6:]}-{rx_id}"
                     cur.execute("""
                         INSERT INTO shunting_sessions (
-                            session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
+                            ld_code, rx_device_id, de_code, tx_device_id,
                             session_start, start_time, session_status, status, distance_trajectory, created_at, updated_at
-                        ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW(), 'LIVE', 'LIVE', '[]'::jsonb, NOW(), NOW())
-                    """, (session_code, session_code, rx_id, rx_id, tx_id, tx_id))
+                        ) VALUES (%s, %s, %s, %s, NOW(), NOW(), 'LIVE', 'LIVE', '[]'::jsonb, NOW(), NOW())
+                    """, (rx_id, rx_id, tx_id, tx_id))
                     print(f"Started session: {rx_id} <--> {tx_id}")
             elif event_type == "PAIR_END" or status == "IDLE":
                 final_val = event.get("final_distance_cm") or distance_cm or 0
@@ -224,14 +223,13 @@ def lambda_handler(event, context):
                 selected_target = readings_obj.get("selected_target_id") or event.get("selected_target_id")
                 is_explicitly_paired = event.get("paired_tx_id") or event.get("paired_rx_id") or event.get("paired_device") or event.get("status") == "PAIRED" or event.get("event") == "PAIR_START" or (selected_target and int(selected_target) > 0)
                 if is_explicitly_paired:
-                    session_code = f"SES-{str(int(time.time()))[-6:]}-{rx_id}"
                     cur.execute("""
                         INSERT INTO shunting_sessions (
-                            session_number, session_code, ld_code, rx_device_id, de_code, tx_device_id,
+                            ld_code, rx_device_id, de_code, tx_device_id,
                             session_start, start_time, session_status, status, final_distance_cm, final_placement_distance,
                             minimum_distance, distance_trajectory, created_at, updated_at
-                        ) VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW(), 'LIVE', 'LIVE', %s, %s / 100.0, %s / 100.0, %s::jsonb, NOW(), NOW())
-                    """, (session_code, session_code, rx_id, rx_id, tx_id, tx_id, distance_cm, distance_cm, distance_cm, json.dumps([json.loads(point)])))
+                        ) VALUES (%s, %s, %s, %s, NOW(), NOW(), 'LIVE', 'LIVE', %s, %s / 100.0, %s / 100.0, %s::jsonb, NOW(), NOW())
+                    """, (rx_id, rx_id, tx_id, tx_id, distance_cm, distance_cm, distance_cm, json.dumps([json.loads(point)])))
                     print(f"Auto-started live shunting session: {rx_id} <--> {tx_id}")
 
         # 5. Insert into legacy telemetry_data for backward compatibility
