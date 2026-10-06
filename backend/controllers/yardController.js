@@ -199,7 +199,7 @@ const deleteYardLine = async (req, res) => {
     const { lineId } = req.params;
 
     // Check if any devices are assigned to this line
-    const devicesResult = await db.query('SELECT COUNT(*) FROM devices WHERE current_line_id = $1', [lineId]);
+    const devicesResult = await db.query('SELECT COUNT(*) FROM device_registry WHERE assigned_line_id = $1', [lineId]);
     if (parseInt(devicesResult.rows[0].count) > 0) {
       return res.status(400).json({ message: 'Cannot delete line because there are devices assigned to it.' });
     }
