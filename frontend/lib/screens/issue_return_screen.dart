@@ -5,7 +5,8 @@ import '../services/api_service.dart';
 import 'device_issue_history_screen.dart';
 
 class IssueReturnScreen extends StatefulWidget {
-  const IssueReturnScreen({super.key});
+  final int initialIndex;
+  const IssueReturnScreen({super.key, this.initialIndex = 0});
 
   @override
   State<IssueReturnScreen> createState() => _IssueReturnScreenState();
@@ -68,6 +69,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
+      initialIndex: widget.initialIndex,
       child: Scaffold(
         backgroundColor: AppTheme.backgroundColor,
         drawer: const AppDrawer(),
