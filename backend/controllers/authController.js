@@ -94,7 +94,7 @@ exports.register = async (req, res) => {
         const token = authHeader.split(' ')[1];
         try {
           const decoded = jwt.verify(token, JWT_SECRET);
-          if (decoded.role === 'super_admin' || decoded.role === 'zone_admin' || decoded.role === 'division_admin' || decoded.role === 'yard_admin') {
+          if (['super_admin', 'zone_admin', 'division_admin', 'yard_admin', 'supervisor'].includes(decoded.role)) {
             isActive = true;
           }
         } catch (err) {
