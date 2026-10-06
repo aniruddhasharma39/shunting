@@ -79,7 +79,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         }
         _availableDivisions = divisions;
         if (yardsRes['success']) {
-          _availableYards = List<Map<String, dynamic>>.from(yardsRes['data'] ?? []);
+          final allYards = List<Map<String, dynamic>>.from(yardsRes['data'] ?? []);
+          if (UserSession().isShuntingSupervisor) {
+            final myYardIds = UserSession().assignedYards.map((y) => y['id'].toString()).toSet();
+            _availableYards = allYards.where((y) => myYardIds.contains(y['id'].toString())).toList();
+          } else {
+            _availableYards = allYards;
+          }
         }
       });
     } finally {

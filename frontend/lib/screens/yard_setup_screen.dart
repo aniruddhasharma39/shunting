@@ -735,7 +735,6 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                             }
                             final code = d['device_code'] ?? d['device_id'] ?? 'DE';
                             final type = d['device_type'] ?? 'Dead-End';
-                            final batt = d['battery_level'] ?? '--';
                             final status = d['health_status'] ?? d['network_status'] ?? 'Online';
 
                             return DropdownMenuItem<String>(

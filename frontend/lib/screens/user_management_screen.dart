@@ -249,7 +249,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   @override
   Widget build(BuildContext context) {
     final session = UserSession();
-    final isSuperAdmin = session.isSuperAdmin;
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(

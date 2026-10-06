@@ -157,7 +157,6 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                       }
                       final code = d['device_code'] ?? d['device_id'] ?? 'LD';
                       final type = d['device_type'] ?? 'Loco Unit';
-                      final batt = d['battery_level'] ?? '--';
                       final status = d['health_status'] ?? d['network_status'] ?? 'Online';
                       
                       return DropdownMenuItem<String>(

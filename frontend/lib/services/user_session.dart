@@ -176,6 +176,9 @@ class UserSession {
   /// Whether this user can manage users (Super Admin, Zone, Division, Yard Admin, Supervisor)
   bool get canManageUsers => isSuperAdmin || isZoneAdmin || isDivisionAdmin || isYardAdmin || isShuntingSupervisor;
 
+  /// Whether this user has maintenance permissions
+  bool get isMaintenanceUser => isYardAdmin || isSuperAdmin;
+
   /// Whether this user can access Hardware Console
   bool get canAccessHardwareConsole => isSuperAdmin || isZoneAdmin || isDivisionAdmin;
 

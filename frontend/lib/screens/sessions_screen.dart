@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
@@ -857,7 +856,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                       ),
                       items: [
                         const DropdownMenuItem<String?>(value: null, child: Text('All Yards')),
-                        ...yards.map((s) => DropdownMenuItem(value: s, child: Text(s!))),
+                        ...yards.map((s) => DropdownMenuItem(value: s, child: Text(s))),
                       ],
                       onChanged: (v) => setSheetState(() => _filterYard = v),
                     ),
@@ -876,7 +875,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
                       ),
                       items: [
                         const DropdownMenuItem<String?>(value: null, child: Text('All Pilots')),
-                        ...pilots.map((s) => DropdownMenuItem(value: s, child: Text(s!))),
+                        ...pilots.map((s) => DropdownMenuItem(value: s, child: Text(s))),
                       ],
                       onChanged: (v) => setSheetState(() => _filterPilot = v),
                     ),
@@ -1013,7 +1012,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
       if (context.mounted) Navigator.pop(context); // close dialog
 
       if (response.statusCode == 200) {
-        await downloadAndOpenPdf(response.bodyBytes, 'SafeShunt_Sessions_${fromStr}_to_${toStr}.pdf');
+        await downloadAndOpenPdf(response.bodyBytes, 'SafeShunt_Sessions_${fromStr}_to_$toStr.pdf');
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Report Downloaded Successfully!'), backgroundColor: Colors.green),

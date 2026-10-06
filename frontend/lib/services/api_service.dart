@@ -600,11 +600,13 @@ class ApiService {
   }
 
   static String getSessionPdfUrl(String sessionId) {
-    return '$baseUrl/reports/session/$sessionId/pdf';
+    final token = UserSession().token ?? '';
+    return '$baseUrl/reports/session/$sessionId/pdf?token=$token';
   }
 
   static String getSessionExcelUrl(String sessionId) {
-    return '$baseUrl/reports/session/$sessionId/excel';
+    final token = UserSession().token ?? '';
+    return '$baseUrl/reports/session/$sessionId/excel?token=$token';
   }
 
   static String getRangeReportPdfUrl(String fromDate, String toDate) {
