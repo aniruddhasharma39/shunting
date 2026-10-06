@@ -38,6 +38,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     if (widget.isAdminCreatingUser) {
       if (role == 'yard_admin') {
         return ['Shunting Supervisor', 'Shunter'];
+      } else if (role == 'supervisor') {
+        return ['Shunter'];
       } else if (role == 'zone_admin') {
         return [
           'Division Administrator',

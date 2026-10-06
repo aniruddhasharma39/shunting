@@ -305,6 +305,9 @@ exports.listUsers = async (req, res) => {
     if (req.user.role === 'yard_admin') {
       query += ` WHERE role IN ('supervisor', 'shunter') OR id = $1`;
       params.push(req.user.id);
+    } else if (req.user.role === 'supervisor') {
+      query += ` WHERE role = 'shunter' OR id = $1`;
+      params.push(req.user.id);
     }
     
     query += ` ORDER BY created_at ASC`;

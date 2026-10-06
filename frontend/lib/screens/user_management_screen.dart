@@ -269,7 +269,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           : _errorMessage != null
               ? Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.redAccent)))
               : _buildTree(),
-      floatingActionButton: isSuperAdmin || session.isZoneAdmin
+      floatingActionButton: session.canManageUsers
           ? FloatingActionButton.extended(
               onPressed: () async {
                 await Navigator.push(context, MaterialPageRoute(builder: (_) => const RegistrationScreen(isAdminCreatingUser: true)));
@@ -339,6 +339,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     } else if (session.isYardAdmin) {
       final myYardAdmins = _byRole('yard_admin').where((ya) => ya['id'].toString() == session.id).toList();
       roots = myYardAdmins.map((ya) => _TreeNode(user: ya, children: buildOpsChildren(ya))).toList();
+    } else if (session.isShuntingSupervisor) {
+      final mySupervisors = _byRole('supervisor').where((su) => su['id'].toString() == session.id).toList();
+      roots = mySupervisors.map((su) {
+        final yardIds = (su['assignedYards'] as List?)?.map((y) => y['id']?.toString()).toSet() ?? {};
+        final shunters = _byRole('shunter').where((sh) {
+          final sYardIds = (sh['assignedYards'] as List?)?.map((y) => y['id']?.toString()).toSet() ?? {};
+          return yardIds.intersection(sYardIds).isNotEmpty;
+        }).toList();
+        return _TreeNode(user: su, children: shunters.map((sh) => _TreeNode(user: sh, children: const [])).toList());
+      }).toList();
     }
 
     return ListView(
