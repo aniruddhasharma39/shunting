@@ -408,54 +408,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Builder(
       builder: (context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        child: Row(
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.spaceEvenly,
           children: [
-            Expanded(
-              child: ElevatedButton.icon(
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const IssueReturnScreen()));
+              },
+              icon: const Icon(Icons.output, size: 16, color: Colors.white),
+              label: const Text('Issue', style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const IssueReturnScreen()));
+              },
+              icon: const Icon(Icons.keyboard_return, size: 16, color: Colors.white),
+              label: const Text('Return', style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+            if (session.canManageDevices)
+              ElevatedButton.icon(
                 onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const IssueReturnScreen()));
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const DeviceInventoryScreen()));
                 },
-                icon: const Icon(Icons.output, size: 16, color: Colors.white),
-                label: const Text('Issue', style: TextStyle(color: Colors.white)),
+                icon: const Icon(Icons.build, size: 16, color: Colors.white),
+                label: const Text('Maintenance', style: TextStyle(color: Colors.white)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  backgroundColor: Colors.orange,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const IssueReturnScreen()));
-                },
-                icon: const Icon(Icons.keyboard_return, size: 16, color: Colors.white),
-                label: const Text('Return', style: TextStyle(color: Colors.white)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-            if (session.canManageDevices) ...[
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const DeviceInventoryScreen()));
-                  },
-                  icon: const Icon(Icons.build, size: 16, color: Colors.white),
-                  label: const Text('Maint.', style: TextStyle(color: Colors.white)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),
