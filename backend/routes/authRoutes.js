@@ -42,7 +42,7 @@ router.get('/divisions', verifyToken, authController.listDivisions);
 // @route   GET /api/auth/users
 // @desc    List all users (for user management & assigning devices)
 // @access  Private (Super Admin & Yard Admin)
-router.get('/users', verifyToken, requireRole('super_admin', 'zone_admin', 'division_admin', 'yard_admin'), authController.listUsers);
+router.get('/users', verifyToken, requireRole('super_admin', 'zone_admin', 'division_admin', 'yard_admin', 'supervisor'), authController.listUsers);
 
 // @route   PUT /api/auth/users/:id/toggle-active
 // @desc    Activate or deactivate a user
