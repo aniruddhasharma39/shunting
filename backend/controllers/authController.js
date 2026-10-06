@@ -1,7 +1,27 @@
 const db = require('../config/db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const cloudinary = require('cloudinary').v2;
 
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+async function uploadToCloudinary(fileBuffer, publicId) {
+  return new Promise((resolve, reject) => {
+    if (!process.env.CLOUDINARY_CLOUD_NAME) return resolve(null);
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { public_id: publicId, resource_type: 'auto' },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result.secure_url);
+      }
+    );
+    uploadStream.end(fileBuffer);
+  });
+}
 const JWT_SECRET = process.env.JWT_SECRET || 'safeshunt_default_secret_key_change_me';
 
 // Map designation strings to role codes
@@ -243,14 +263,20 @@ exports.uploadProfilePicture = async (req, res) => {
       return res.status(400).json({ message: 'No image file provided' });
     }
     const userId = req.user.id;
-    // Ensure cross-platform path formatting (e.g. uploads/filename.jpg)
-    const filePath = '/' + req.file.path.replace(/\\/g, '/');
+    
+    // Upload to Cloudinary
+    const publicId = `profile_pic_${userId}_${Date.now()}`;
+    const cloudinaryUrl = await uploadToCloudinary(req.file.buffer, publicId);
 
-    await db.query('UPDATE users SET profile_pic_url = $1 WHERE id = $2', [filePath, userId]);
+    if (!cloudinaryUrl) {
+      return res.status(500).json({ message: 'Failed to upload image to Cloudinary' });
+    }
+
+    await db.query('UPDATE users SET profile_pic_url = $1 WHERE id = $2', [cloudinaryUrl, userId]);
 
     res.json({ 
       message: 'Profile picture updated successfully', 
-      profile_pic_url: filePath 
+      profile_pic_url: cloudinaryUrl 
     });
   } catch (err) {
     console.error('Error uploading profile picture:', err);

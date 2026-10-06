@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/user_session.dart';
+import '../services/api_service.dart';
 import '../screens/yard_setup_screen.dart';
 import '../screens/device_inventory_screen.dart';
 
@@ -43,10 +44,17 @@ class AppDrawer extends StatelessWidget {
                       CircleAvatar(
                         radius: 24,
                         backgroundColor: Colors.white24,
-                        child: Text(
-                          (session.fullName ?? 'U')[0].toUpperCase(),
-                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
+                        backgroundImage: session.profilePicUrl != null 
+                            ? NetworkImage(session.profilePicUrl!.startsWith('http') 
+                                ? session.profilePicUrl! 
+                                : '${ApiService.baseUrl.replaceAll('/api', '')}${session.profilePicUrl}')
+                            : null,
+                        child: session.profilePicUrl == null
+                            ? Text(
+                                (session.fullName ?? 'U')[0].toUpperCase(),
+                                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                              )
+                            : null,
                       ),
                       const SizedBox(width: 12),
                       Expanded(

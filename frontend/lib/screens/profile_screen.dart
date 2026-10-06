@@ -135,7 +135,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                       image: session.profilePicUrl != null
                           ? DecorationImage(
-                              image: NetworkImage('$baseHost${session.profilePicUrl}'),
+                              image: NetworkImage(session.profilePicUrl!.startsWith('http') 
+                                  ? session.profilePicUrl! 
+                                  : '$baseHost${session.profilePicUrl}'),
                               fit: BoxFit.cover,
                             )
                           : null,
