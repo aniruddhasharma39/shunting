@@ -46,13 +46,31 @@ const verifyToken = async (req, res, next) => {
       role: user.role,
     };
 
-    // If yard_admin, also fetch assigned yard IDs
-    if (user.role === 'yard_admin') {
+    // If yard_admin or supervisor or shunter, also fetch assigned yard IDs
+    if (['yard_admin', 'supervisor', 'shunter'].includes(user.role)) {
       const yardResult = await db.query(
         'SELECT yard_id FROM user_yard_assignments WHERE user_id = $1',
         [user.id]
       );
       req.user.assignedYardIds = yardResult.rows.map(r => r.yard_id);
+    }
+
+    // If zone_admin, fetch assigned zones
+    if (user.role === 'zone_admin') {
+      const zoneResult = await db.query(
+        'SELECT zone_name FROM user_zone_assignments WHERE user_id = $1',
+        [user.id]
+      );
+      req.user.assignedZones = zoneResult.rows.map(r => r.zone_name);
+    }
+
+    // If division_admin, fetch assigned divisions
+    if (user.role === 'division_admin') {
+      const divisionResult = await db.query(
+        'SELECT division_name FROM user_division_assignments WHERE user_id = $1',
+        [user.id]
+      );
+      req.user.assignedDivisions = divisionResult.rows.map(r => r.division_name);
     }
 
     next();

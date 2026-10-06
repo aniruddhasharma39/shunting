@@ -6,14 +6,42 @@ const awsIotBridge = require('../services/awsIotBridge');
 // @access  Private
 const getDashboardSummary = async (req, res) => {
   try {
-    const userId = req.user?.id;
-    const role = req.user?.role;
+    const user = req.user;
+    let yardWhereClause = '';
+    let yardParams = [];
+    
+    if (user && user.role === 'zone_admin') {
+      if (user.assignedZones && user.assignedZones.length > 0) {
+        yardWhereClause = `yard_id IN (SELECT id FROM yards WHERE zone = ANY($1))`;
+        yardParams.push(user.assignedZones);
+      } else {
+        yardWhereClause = `1=0`;
+      }
+    } else if (user && user.role === 'division_admin') {
+      if (user.assignedDivisions && user.assignedDivisions.length > 0) {
+        yardWhereClause = `yard_id IN (SELECT id FROM yards WHERE division = ANY($1))`;
+        yardParams.push(user.assignedDivisions);
+      } else {
+        yardWhereClause = `1=0`;
+      }
+    } else if (user && ['yard_admin', 'supervisor', 'shunter'].includes(user.role)) {
+      if (user.assignedYardIds && user.assignedYardIds.length > 0) {
+        yardWhereClause = `yard_id = ANY($1::int[])`;
+        yardParams.push(user.assignedYardIds);
+      } else {
+        yardWhereClause = `1=0`;
+      }
+    }
+
+    const whereDr = yardWhereClause ? 'WHERE ' + yardWhereClause.replace('yard_id', 'dr.yard_id') : '';
+    const andSs = yardWhereClause ? 'AND ' + yardWhereClause.replace('yard_id', 'ss.yard_id') : '';
+    const andDr = yardWhereClause ? 'AND ' + yardWhereClause.replace('yard_id', 'dr.yard_id') : '';
 
     // Run background sweep to ensure stale sessions are transitioned to history
     awsIotBridge.sweepStaleSessions().catch(() => {});
 
     // 1. Real Online count based on 45-second rule from device_telemetry & device_registry
-    const countRes = await db.query(`
+    let query1 = `
       SELECT 
         COUNT(*)::int AS total_devices,
         COUNT(CASE WHEN GREATEST(dr.last_reading_timestamp, dt.latest_telemetry_time) >= (NOW() - INTERVAL '45 SECONDS') THEN 1 END)::int AS active_devices,
@@ -24,19 +52,22 @@ const getDashboardSummary = async (req, res) => {
         FROM device_telemetry
         GROUP BY device_id
       ) dt ON dr.device_id = dt.device_id
-    `);
+      ${whereDr}
+    `;
+    const countRes = await db.query(query1, yardParams);
 
     const activeDevices = countRes.rows[0]?.active_devices || 0;
     const offlineDevices = countRes.rows[0]?.offline_devices || 0;
 
     // 2. Total Sessions Today (strictly from hardware shunting_sessions, completely decoupled from assignments)
-    // Exclude ghost/fake sessions (ones without distance data)
-    const sessionsRes = await db.query(`
+    let query2 = `
       SELECT COUNT(*)::int AS count 
-      FROM shunting_sessions 
-      WHERE DATE(COALESCE(start_time, session_start, created_at)) = CURRENT_DATE
-        AND NOT (final_distance_cm IS NULL AND (distance_trajectory IS NULL OR distance_trajectory = '[]'::jsonb))
-    `);
+      FROM shunting_sessions ss
+      WHERE DATE(COALESCE(ss.start_time, ss.session_start, ss.created_at)) = CURRENT_DATE
+        AND NOT (ss.final_distance_cm IS NULL AND (ss.distance_trajectory IS NULL OR ss.distance_trajectory = '[]'::jsonb))
+        ${andSs}
+    `;
+    const sessionsRes = await db.query(query2, yardParams);
     const totalSessionsToday = sessionsRes.rows[0]?.count || 0;
 
     // 3. Critical Alerts from real alerts_logs in the last 24 hours
@@ -61,7 +92,6 @@ const getDashboardSummary = async (req, res) => {
     const systemStatus = criticalCount > 0 ? (criticalCount > 5 ? 'Warning' : 'Degraded') : 'Operational';
 
     // 4. Live Active Sessions
-    // Find all registered transmitters to avoid any 'N/A' pairing
     const txDeviceRes = await db.query(`
       SELECT device_code, yard_id, assigned_line_id 
       FROM devices 
@@ -70,7 +100,6 @@ const getDashboardSummary = async (req, res) => {
     `);
     const defaultTransmitter = txDeviceRes.rows.length > 0 ? txDeviceRes.rows[0].device_code : 'TX-01';
 
-    // Query active hardware shunting sessions first
     let ssQuery = `
       SELECT 
         ss.id,
@@ -86,10 +115,11 @@ const getDashboardSummary = async (req, res) => {
       LEFT JOIN yards y ON ss.yard_id = y.id
       WHERE (ss.status = 'LIVE' OR ss.session_status = 'LIVE')
         AND ss.updated_at >= (NOW() - INTERVAL '60 SECONDS')
+        ${andSs}
       ORDER BY ss.updated_at DESC
       LIMIT 10
     `;
-    const liveShuntingRes = await db.query(ssQuery);
+    const liveShuntingRes = await db.query(ssQuery, yardParams);
 
     const liveSessions = [];
     const seenLdDevices = new Set();
@@ -102,7 +132,6 @@ const getDashboardSummary = async (req, res) => {
         deDeviceName = defaultTransmitter;
       }
 
-      // Check sub-second in-memory bridge buffer first
       const memPkt = awsIotBridge.getLatestTelemetryForDevices([session.ld_device, deDeviceName]);
 
       let realDistance = '--m';
@@ -150,12 +179,15 @@ const getDashboardSummary = async (req, res) => {
 
     // 5. Also check for raw active telemetry streams in last 60 seconds (hardware auto-detect)
     if (liveSessions.length === 0) {
-      const activeRawTel = await db.query(`
-        SELECT DISTINCT ON (device_id) device_id, topic, payload, distance_cm, recorded_at
-        FROM device_telemetry
-        WHERE recorded_at >= (NOW() - INTERVAL '60 SECONDS')
-        ORDER BY device_id, recorded_at DESC
-      `);
+      let queryRaw = `
+        SELECT DISTINCT ON (dt.device_id) dt.device_id, dt.topic, dt.payload, dt.distance_cm, dt.recorded_at
+        FROM device_telemetry dt
+        LEFT JOIN device_registry dr ON dt.device_id = dr.device_id
+        WHERE dt.recorded_at >= (NOW() - INTERVAL '60 SECONDS')
+        ${andDr}
+        ORDER BY dt.device_id, dt.recorded_at DESC
+      `;
+      const activeRawTel = await db.query(queryRaw, yardParams);
 
       for (const row of activeRawTel.rows) {
         const devId = row.device_id;
@@ -193,8 +225,6 @@ const getDashboardSummary = async (req, res) => {
         });
       }
     }
-
-
 
     res.json({
       health: {

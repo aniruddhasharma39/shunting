@@ -183,25 +183,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildBodyForRole(BuildContext context, UserSession session, Map<String, dynamic> data) {
-    if (session.isSuperAdmin) {
-      return _buildSuperAdminBody(context, data);
-    } else if (session.isYardAdmin) {
+    if (session.isSuperAdmin || session.isZoneAdmin || session.isDivisionAdmin) {
+      return _buildSuperAdminBody(context, session, data);
+    } else if (session.isYardAdmin || session.isShuntingSupervisor || session.isShunter) {
       return _buildYardAdminBody(context, session, data);
     } else {
       return _buildViewerBody(context, data);
     }
   }
 
+  // SUPER ADMIN / ZONE ADMIN / DIVISION ADMIN DASHBOARD
   // ==========================================
-  // SUPER ADMIN DASHBOARD
-  // ==========================================
-  Widget _buildSuperAdminBody(BuildContext context, Map<String, dynamic> data) {
+  Widget _buildSuperAdminBody(BuildContext context, UserSession session, Map<String, dynamic> data) {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSuperAdminBanner(),
+          _buildSuperAdminBanner(session),
           _buildCriticalAlertsBanner(data['criticalAlert']),
           const SizedBox(height: 24),
           _buildSectionTitle('LIVE ACTIVE SESSIONS', Icons.radar),
@@ -222,8 +221,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ==========================================
-  // YARD ADMIN DASHBOARD
+  // YARD ADMIN / SUPERVISOR / SHUNTER DASHBOARD
   // ==========================================
   Widget _buildYardAdminBody(BuildContext context, UserSession session, Map<String, dynamic> data) {
     return SingleChildScrollView(
@@ -232,7 +230,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildYardAdminBanner(session),
-          _buildYardAdminQuickActions(),
+          _buildYardAdminQuickActions(session),
           _buildCriticalAlertsBanner(data['criticalAlert']),
           const SizedBox(height: 24),
           _buildSectionTitle('LIVE ACTIVE SESSIONS (MY YARDS)', Icons.radar),
@@ -328,7 +326,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSuperAdminBanner() {
+  Widget _buildSuperAdminBanner(UserSession session) {
+    String scopeText = 'Viewing All Yards';
+    if (session.isZoneAdmin) scopeText = 'Viewing Assigned Zones';
+    if (session.isDivisionAdmin) scopeText = 'Viewing Assigned Divisions';
+    
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -338,12 +340,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         border: Border.all(color: const Color(0xFFDC2626).withValues(alpha: 0.3)),
       ),
       child: Row(
-        children: const [
-          Icon(Icons.admin_panel_settings, color: Color(0xFFDC2626), size: 18),
-          SizedBox(width: 8),
+        children: [
+          const Icon(Icons.admin_panel_settings, color: Color(0xFFDC2626), size: 18),
+          const SizedBox(width: 8),
           Text(
-            'Super Administrator – Viewing All Yards',
-            style: TextStyle(color: Color(0xFFDC2626), fontSize: 12, fontWeight: FontWeight.w600),
+            '${session.displayRole} – $scopeText',
+            style: const TextStyle(color: Color(0xFFDC2626), fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -379,7 +381,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    hasYards ? 'Yard Administrator' : 'No Yards Assigned',
+                    hasYards ? session.displayRole : 'No Yards Assigned',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -402,7 +404,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildYardAdminQuickActions() {
+  Widget _buildYardAdminQuickActions(UserSession session) {
     return Builder(
       builder: (context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
@@ -437,21 +439,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const DeviceInventoryScreen()));
-                },
-                icon: const Icon(Icons.build, size: 16, color: Colors.white),
-                label: const Text('Maint.', style: TextStyle(color: Colors.white)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            if (session.canManageDevices) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const DeviceInventoryScreen()));
+                  },
+                  icon: const Icon(Icons.build, size: 16, color: Colors.white),
+                  label: const Text('Maint.', style: TextStyle(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),

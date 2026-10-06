@@ -11,6 +11,6 @@ router.post('/issue', protect, issueDevice);
 router.post('/return', protect, returnDevice);
 router.get('/assignments', protect, getDeviceAssignments);
 router.put('/:id/assign-line', protect, assignLine);
-router.put('/:id/toggle-disabled', protect, requireRole('super_admin', 'hardware_engineer', 'yard_admin'), toggleDeviceDisabled);
+router.put('/:id/toggle-disabled', protect, requireRole('super_admin', 'yard_admin'), toggleDeviceDisabled);
 
 module.exports = router;

@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+const fs = require('fs');
+
+const code = `import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/user_session.dart';
@@ -330,3 +332,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 }
+`;
+
+const target = 'C:/Users/KRISHNA KHIRBADODIYA/Desktop/VASP Systemic/Shunting/frontend/lib/screens/registration_screen.dart';
+fs.writeFileSync(target, code, 'utf8');
+console.log('Written:', target, fs.statSync(target).size, 'bytes');

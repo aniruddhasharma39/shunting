@@ -7,11 +7,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'safeshunt_default_secret_key_chang
 // Map designation strings to role codes
 const designationToRole = {
   'Super Administrator': 'super_admin',
+  'Zone Administrator': 'zone_admin',
+  'Division Administrator': 'division_admin',
   'Yard Administrator': 'yard_admin',
-  'Hardware Engineer': 'hardware_engineer',
-  'Maintenance User': 'maintenance_user',
-  'Loco Pilot': 'loco_pilot',
-  'Viewer / Control Room User': 'viewer',
+  'Shunting Supervisor': 'supervisor',
+  'Shunter': 'shunter',
 };
 
 // Helper for generating JWT token (now includes role)
@@ -34,8 +34,24 @@ const getAssignedYards = async (userId) => {
   return result.rows;
 };
 
+const getAssignedZones = async (userId) => {
+  const result = await db.query(
+    `SELECT zone_name FROM user_zone_assignments WHERE user_id = $1`,
+    [userId]
+  );
+  return result.rows.map(row => row.zone_name);
+};
+
+const getAssignedDivisions = async (userId) => {
+  const result = await db.query(
+    `SELECT division_name FROM user_division_assignments WHERE user_id = $1`,
+    [userId]
+  );
+  return result.rows.map(row => row.division_name);
+};
+
 exports.register = async (req, res) => {
-  const { fullName, employeeId, email, designation, password } = req.body;
+  const { fullName, employeeId, email, designation, password, assignedYards, assignedZones, assignedDivisions } = req.body;
 
   try {
     // 1. Check if user already exists
@@ -45,7 +61,7 @@ exports.register = async (req, res) => {
     }
 
     // 2. Derive role from designation
-    const role = designationToRole[designation] || 'viewer';
+    const role = designationToRole[designation] || 'shunter';
 
     // Check if this is the first user in the system
     const userCountResult = await db.query('SELECT COUNT(*) FROM users');
@@ -58,12 +74,8 @@ exports.register = async (req, res) => {
         const token = authHeader.split(' ')[1];
         try {
           const decoded = jwt.verify(token, JWT_SECRET);
-          if (decoded.role === 'super_admin' || decoded.role === 'yard_admin') {
+          if (decoded.role === 'super_admin' || decoded.role === 'zone_admin' || decoded.role === 'division_admin' || decoded.role === 'yard_admin') {
             isActive = true;
-          }
-          
-          if (decoded.role === 'yard_admin' && !['Maintenance User', 'Viewer / Control Room User', 'Loco Pilot'].includes(designation)) {
-            return res.status(403).json({ message: 'Forbidden: You do not have permission to create this role.' });
           }
         } catch (err) {
           console.warn('Admin creation token verification failed', err);
@@ -75,13 +87,46 @@ exports.register = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // 4. Insert user into DB (now with role)
+    // Start transaction for user creation and assignments
+    await db.query('BEGIN');
+
+    // 4. Insert user into DB
     const newUser = await db.query(
       'INSERT INTO users (full_name, employee_id, email, designation, password_hash, role, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, full_name, employee_id, email, designation, role',
       [fullName, employeeId, email, designation, passwordHash, role, isActive]
     );
 
     const user = newUser.rows[0];
+
+    // Assign Yards
+    if (assignedYards && Array.isArray(assignedYards)) {
+      for (const yardId of assignedYards) {
+        await db.query('INSERT INTO user_yard_assignments (user_id, yard_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [user.id, yardId]);
+      }
+    }
+    // Assign Zones
+    if (assignedZones && Array.isArray(assignedZones)) {
+      for (const zoneName of assignedZones) {
+        await db.query('INSERT INTO user_zone_assignments (user_id, zone_name) VALUES ($1, $2) ON CONFLICT DO NOTHING', [user.id, zoneName]);
+      }
+    }
+    // Assign Divisions
+    if (assignedDivisions && Array.isArray(assignedDivisions)) {
+      for (const divisionName of assignedDivisions) {
+        await db.query('INSERT INTO user_division_assignments (user_id, division_name) VALUES ($1, $2) ON CONFLICT DO NOTHING', [user.id, divisionName]);
+      }
+      // Also link division admin to their parent zone (from request body)
+      // This enables the hierarchy tree to correctly place them under their Zone Admin
+      if (role === 'division_admin' && req.body.parentZone) {
+        await db.query('INSERT INTO user_zone_assignments (user_id, zone_name) VALUES ($1, $2) ON CONFLICT DO NOTHING', [user.id, req.body.parentZone]);
+      }
+    }
+
+    await db.query('COMMIT');
+
+    const createdAssignedYards = await getAssignedYards(user.id);
+    const createdAssignedZones = await getAssignedZones(user.id);
+    const createdAssignedDivisions = await getAssignedDivisions(user.id);
 
     // 5. Return success and token (if active)
     res.status(201).json({
@@ -93,12 +138,15 @@ exports.register = async (req, res) => {
         email: user.email,
         designation: user.designation,
         role: user.role,
-        assignedYards: [], // New user has no yards assigned yet
+        assignedYards: createdAssignedYards,
+        assignedZones: createdAssignedZones,
+        assignedDivisions: createdAssignedDivisions,
       },
       token: isActive ? generateToken(user.id, user.employee_id, user.role) : null
     });
 
   } catch (error) {
+    await db.query('ROLLBACK');
     console.error('Error in register:', error);
     res.status(500).json({ message: 'Server error during registration' });
   }
@@ -128,8 +176,10 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    // 4. Fetch assigned yards (for yard_admin and all roles for context)
+    // 4. Fetch assigned yards, zones, divisions
     const assignedYards = await getAssignedYards(user.id);
+    const assignedZones = await getAssignedZones(user.id);
+    const assignedDivisions = await getAssignedDivisions(user.id);
 
     // 5. Return user data and token
     res.status(200).json({
@@ -140,11 +190,13 @@ exports.login = async (req, res) => {
         employeeId: user.employee_id,
         email: user.email,
         designation: user.designation,
-        role: user.role || 'viewer',
+        role: user.role || 'shunter',
         profile_pic_url: user.profile_pic_url,
         assignedYards: assignedYards,
+        assignedZones: assignedZones,
+        assignedDivisions: assignedDivisions,
       },
-      token: generateToken(user.id, user.employee_id, user.role || 'viewer')
+      token: generateToken(user.id, user.employee_id, user.role || 'shunter')
     });
 
   } catch (error) {
@@ -162,6 +214,8 @@ exports.getMe = async (req, res) => {
     }
     const user = userResult.rows[0];
     const assignedYards = await getAssignedYards(req.user.id);
+    const assignedZones = await getAssignedZones(req.user.id);
+    const assignedDivisions = await getAssignedDivisions(req.user.id);
 
     res.status(200).json({
       user: {
@@ -173,6 +227,8 @@ exports.getMe = async (req, res) => {
         role: user.role,
         profile_pic_url: user.profile_pic_url,
         assignedYards: assignedYards,
+        assignedZones: assignedZones,
+        assignedDivisions: assignedDivisions,
       },
     });
   } catch (error) {
@@ -221,16 +277,18 @@ exports.listUsers = async (req, res) => {
     let params = [];
     
     if (req.user.role === 'yard_admin') {
-      query += ` WHERE role IN ('maintenance_user', 'viewer', 'loco_pilot')`;
+      query += ` WHERE role IN ('supervisor', 'shunter')`;
     }
     
-    query += ` ORDER BY created_at DESC`;
+    query += ` ORDER BY created_at ASC`;
     
     const result = await db.query(query, params);
 
-    // For each user, fetch their assigned yards
+    // For each user, fetch their assigned yards, zones, divisions
     const users = await Promise.all(result.rows.map(async (user) => {
       const yards = await getAssignedYards(user.id);
+      const zones = await getAssignedZones(user.id);
+      const divisions = await getAssignedDivisions(user.id);
       return {
         id: user.id,
         fullName: user.full_name,
@@ -242,12 +300,70 @@ exports.listUsers = async (req, res) => {
         createdAt: user.created_at,
         profile_pic_url: user.profile_pic_url,
         assignedYards: yards,
+        assignedZones: zones,
+        assignedDivisions: divisions,
       };
     }));
 
     res.status(200).json({ users });
   } catch (error) {
     console.error('Error in listUsers:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// GET /api/auth/zones - List all distinct zones
+exports.listZones = async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT DISTINCT zone_name FROM user_zone_assignments
+      INNER JOIN users ON users.id = user_zone_assignments.user_id
+      WHERE users.role = 'zone_admin'
+      ORDER BY zone_name
+    `);
+    res.json({ zones: result.rows.map(r => r.zone_name) });
+  } catch (error) {
+    console.error('Error in listZones:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// GET /api/auth/divisions - List all distinct divisions
+exports.listDivisions = async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT DISTINCT division_name FROM user_division_assignments
+      INNER JOIN users ON users.id = user_division_assignments.user_id
+      WHERE users.role = 'division_admin'
+      ORDER BY division_name
+    `);
+    res.json({ divisions: result.rows.map(r => r.division_name) });
+  } catch (error) {
+    console.error('Error in listDivisions:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// DELETE /api/auth/users/:id/zone/:zoneName - Remove zone assignment
+exports.removeZoneAssignment = async (req, res) => {
+  try {
+    const { id, zoneName } = req.params;
+    await db.query('DELETE FROM user_zone_assignments WHERE user_id = $1 AND zone_name = $2', [id, decodeURIComponent(zoneName)]);
+    res.json({ message: 'Zone assignment removed.' });
+  } catch (error) {
+    console.error('Error in removeZoneAssignment:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// DELETE /api/auth/users/:id/division/:divisionName - Remove division assignment
+exports.removeDivisionAssignment = async (req, res) => {
+  try {
+    const { id, divisionName } = req.params;
+    await db.query('DELETE FROM user_division_assignments WHERE user_id = $1 AND division_name = $2', [id, decodeURIComponent(divisionName)]);
+    res.json({ message: 'Division assignment removed.' });
+  } catch (error) {
+    console.error('Error in removeDivisionAssignment:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -266,7 +382,7 @@ exports.toggleUserActive = async (req, res) => {
     if (req.user.role === 'yard_admin') {
       const targetUserCheck = await db.query('SELECT role FROM users WHERE id = $1', [id]);
       if (targetUserCheck.rows.length === 0) return res.status(404).json({ message: 'User not found' });
-      if (!['maintenance_user', 'viewer', 'loco_pilot'].includes(targetUserCheck.rows[0].role)) {
+      if (!['supervisor', 'shunter'].includes(targetUserCheck.rows[0].role)) {
         return res.status(403).json({ message: 'Forbidden: You do not have permission to manage this user role.' });
       }
     }
@@ -305,15 +421,11 @@ exports.deleteUser = async (req, res) => {
     if (req.user.role === 'yard_admin') {
       const targetUserCheck = await db.query('SELECT role FROM users WHERE id = $1', [id]);
       if (targetUserCheck.rows.length === 0) return res.status(404).json({ message: 'User not found' });
-      if (!['maintenance_user', 'viewer', 'loco_pilot'].includes(targetUserCheck.rows[0].role)) {
+      if (!['supervisor', 'shunter'].includes(targetUserCheck.rows[0].role)) {
         return res.status(403).json({ message: 'Forbidden: You do not have permission to manage this user role.' });
       }
     }
 
-    // Since user id might be referenced in device_assignments or session_assignments
-    // We should either cascade delete or check constraints
-    // Let's assume standard postgres setup with ON DELETE SET NULL or ON DELETE CASCADE
-    // If not, we might need to handle it. For now, we will do a direct delete.
     const result = await db.query(
       'DELETE FROM users WHERE id = $1 RETURNING id',
       [id]

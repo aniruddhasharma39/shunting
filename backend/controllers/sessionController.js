@@ -108,6 +108,36 @@ const getSessions = async (req, res) => {
       paramIndex++;
     }
 
+    if (req.user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(req.user.role)) {
+      let yardWhere = '';
+      if (req.user.role === 'zone_admin') {
+        if (req.user.assignedZones && req.user.assignedZones.length > 0) {
+          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($${paramIndex}))`;
+          ssParams.push(req.user.assignedZones);
+          paramIndex++;
+        } else {
+          yardWhere = `= -1`;
+        }
+      } else if (req.user.role === 'division_admin') {
+        if (req.user.assignedDivisions && req.user.assignedDivisions.length > 0) {
+          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($${paramIndex}))`;
+          ssParams.push(req.user.assignedDivisions);
+          paramIndex++;
+        } else {
+          yardWhere = `= -1`;
+        }
+      } else {
+        if (req.user.assignedYardIds && req.user.assignedYardIds.length > 0) {
+          yardWhere = `= ANY($${paramIndex}::int[])`;
+          ssParams.push(req.user.assignedYardIds);
+          paramIndex++;
+        } else {
+          yardWhere = `= -1`;
+        }
+      }
+      ssWhere.push(`(ss.yard_id ${yardWhere} OR ss.yard_id IS NULL)`);
+    }
+
     if (ssWhere.length > 0) {
       ssQuery += ` WHERE ` + ssWhere.join(' AND ');
     }
@@ -305,10 +335,43 @@ const getSessionDetailsWithLogs = async (req, res) => {
       FROM shunting_sessions ss
       LEFT JOIN yard_lines yl ON ss.line_id = yl.id
       LEFT JOIN yards y ON ss.yard_id = y.id
-      WHERE ss.id::text = $1 OR ss.session_code = $1 OR ss.session_number = $1
-      LIMIT 1
+      WHERE (ss.id::text = $1 OR ss.session_code = $1 OR ss.session_number = $1)
     `;
-    const ssRes = await db.query(ssQuery, [id]);
+    let ssParams = [id];
+    
+    if (req.user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(req.user.role)) {
+      let yardWhere = '';
+      if (req.user.role === 'zone_admin') {
+        if (req.user.assignedZones && req.user.assignedZones.length > 0) {
+          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($2))`;
+          ssParams.push(req.user.assignedZones);
+        } else {
+          yardWhere = `= -1`;
+        }
+      } else if (req.user.role === 'division_admin') {
+        if (req.user.assignedDivisions && req.user.assignedDivisions.length > 0) {
+          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($2))`;
+          ssParams.push(req.user.assignedDivisions);
+        } else {
+          yardWhere = `= -1`;
+        }
+      } else {
+        if (req.user.assignedYardIds && req.user.assignedYardIds.length > 0) {
+          yardWhere = `= ANY($2::int[])`;
+          ssParams.push(req.user.assignedYardIds);
+        } else {
+          yardWhere = `= -1`;
+        }
+      }
+      if (ssParams.length > 1) {
+          ssQuery += ` AND (ss.yard_id ${yardWhere} OR ss.yard_id IS NULL)`;
+      } else {
+          ssQuery += ` AND (1=0)`;
+      }
+    }
+    
+    ssQuery += ` LIMIT 1`;
+    const ssRes = await db.query(ssQuery, ssParams);
 
     let sessionMeta = null;
     let rawTrajectory = [];
@@ -502,11 +565,48 @@ const getSessionsForRangeReport = async (req, res) => {
       LEFT JOIN yards y ON ss.yard_id = y.id
       WHERE COALESCE(ss.start_time, ss.session_start, ss.created_at) >= $1::timestamptz
         AND COALESCE(ss.start_time, ss.session_start, ss.created_at) <= $2::timestamptz + INTERVAL '1 day' - INTERVAL '1 second'
+    `;
+    
+    let params = [from_date, to_date];
+    
+    if (req.user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(req.user.role)) {
+      let yardWhere = '';
+      if (req.user.role === 'zone_admin') {
+        if (req.user.assignedZones && req.user.assignedZones.length > 0) {
+          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($3))`;
+          params.push(req.user.assignedZones);
+        } else {
+          yardWhere = `= -1`;
+        }
+      } else if (req.user.role === 'division_admin') {
+        if (req.user.assignedDivisions && req.user.assignedDivisions.length > 0) {
+          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($3))`;
+          params.push(req.user.assignedDivisions);
+        } else {
+          yardWhere = `= -1`;
+        }
+      } else {
+        if (req.user.assignedYardIds && req.user.assignedYardIds.length > 0) {
+          yardWhere = `= ANY($3::int[])`;
+          params.push(req.user.assignedYardIds);
+        } else {
+          yardWhere = `= -1`;
+        }
+      }
+      
+      if (params.length > 2) {
+          sessionsQuery += ` AND (ss.yard_id ${yardWhere} OR ss.yard_id IS NULL)`;
+      } else {
+          sessionsQuery += ` AND (1=0)`;
+      }
+    }
+
+    sessionsQuery += `
       ORDER BY COALESCE(ss.start_time, ss.session_start, ss.created_at) ASC
       LIMIT 500
     `;
 
-    const ssRes = await db.query(sessionsQuery, [from_date, to_date]);
+    const ssRes = await db.query(sessionsQuery, params);
 
     // Filter and map sessions - only real devices
     const sessions = ssRes.rows

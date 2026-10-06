@@ -31,33 +31,48 @@ const getYards = async (req, res) => {
     let yards;
     let lines;
 
-    if (req.user.role === 'yard_admin') {
-      yards = await db.query(`
-        SELECT y.* FROM yards y
-        JOIN user_yard_assignments uya ON y.id = uya.yard_id
-        WHERE uya.user_id = $1
-        ORDER BY y.created_at DESC
-      `, [req.user.id]);
-      
-      lines = await db.query(`
-        SELECT yl.*, COALESCE(d.device_code, dr.device_id) as assigned_de, d.id as assigned_device_id 
-        FROM yard_lines yl 
-        LEFT JOIN devices d ON d.assigned_line_id = yl.id AND (d.device_type = 'Dead-End' OR d.device_code ILIKE 'TX%' OR d.device_code ILIKE 'DE%')
-        LEFT JOIN device_registry dr ON dr.assigned_line_id = yl.id AND (dr.product_type ILIKE '%TRANSMITTER%' OR dr.device_id ILIKE 'TX%' OR dr.device_id ILIKE 'DE%')
-        JOIN user_yard_assignments uya ON yl.yard_id = uya.yard_id
-        WHERE uya.user_id = $1
-        ORDER BY yl.created_at DESC
-      `, [req.user.id]);
-    } else {
-      yards = await db.query('SELECT * FROM yards ORDER BY created_at DESC');
-      lines = await db.query(`
-        SELECT yl.*, COALESCE(d.device_code, dr.device_id) as assigned_de, d.id as assigned_device_id 
-        FROM yard_lines yl 
-        LEFT JOIN devices d ON d.assigned_line_id = yl.id AND (d.device_type = 'Dead-End' OR d.device_code ILIKE 'TX%' OR d.device_code ILIKE 'DE%')
-        LEFT JOIN device_registry dr ON dr.assigned_line_id = yl.id AND (dr.product_type ILIKE '%TRANSMITTER%' OR dr.device_id ILIKE 'TX%' OR dr.device_id ILIKE 'DE%')
-        ORDER BY yl.created_at DESC
-      `);
+    let yardConditions = [];
+    let yardParams = [];
+    const user = req.user;
+
+    if (user.role === 'zone_admin') {
+      if (user.assignedZones && user.assignedZones.length > 0) {
+        yardConditions.push(`y.zone = ANY($${yardParams.length + 1})`);
+        yardParams.push(user.assignedZones);
+      } else {
+        yardConditions.push('1=0');
+      }
+    } else if (user.role === 'division_admin') {
+      if (user.assignedDivisions && user.assignedDivisions.length > 0) {
+        yardConditions.push(`y.division = ANY($${yardParams.length + 1})`);
+        yardParams.push(user.assignedDivisions);
+      } else {
+        yardConditions.push('1=0');
+      }
+    } else if (['yard_admin', 'supervisor', 'shunter'].includes(user.role)) {
+      if (user.assignedYardIds && user.assignedYardIds.length > 0) {
+        yardConditions.push(`y.id = ANY($${yardParams.length + 1})`);
+        yardParams.push(user.assignedYardIds);
+      } else {
+        yardConditions.push('1=0');
+      }
     }
+
+    let yardWhere = yardConditions.length > 0 ? 'WHERE ' + yardConditions.join(' AND ') : '';
+    
+    yards = await db.query(`SELECT y.* FROM yards y ${yardWhere} ORDER BY y.created_at DESC`, yardParams);
+    
+    // For lines, filter by the same yards
+    let lineWhere = yardConditions.length > 0 ? 'WHERE yl.yard_id IN (SELECT id FROM yards y ' + yardWhere + ')' : '';
+    
+    lines = await db.query(`
+      SELECT yl.*, COALESCE(d.device_code, dr.device_id) as assigned_de, COALESCE(d.id, dr.id) as assigned_device_id 
+      FROM yard_lines yl 
+      LEFT JOIN devices d ON d.assigned_line_id = yl.id AND (d.device_type = 'Dead-End' OR d.device_code ILIKE 'TX%' OR d.device_code ILIKE 'DE%')
+      LEFT JOIN device_registry dr ON dr.assigned_line_id = yl.id AND (dr.product_type ILIKE '%TRANSMITTER%' OR dr.device_id ILIKE 'TX%' OR dr.device_id ILIKE 'DE%')
+      ${lineWhere}
+      ORDER BY yl.created_at DESC
+    `, yardParams);
     
     // Group lines by yard
     const mappedYards = yards.rows.map(y => {
@@ -197,10 +212,20 @@ const deleteYard = async (req, res) => {
 const deleteYardLine = async (req, res) => {
   try {
     const { lineId } = req.params;
+
+    // Check if any devices are assigned to this line
+    const devicesResult = await db.query('SELECT COUNT(*) FROM devices WHERE current_line_id = $1', [lineId]);
+    if (parseInt(devicesResult.rows[0].count) > 0) {
+      return res.status(400).json({ message: 'Cannot delete line because there are devices assigned to it.' });
+    }
+
     await db.query('DELETE FROM yard_lines WHERE id = $1', [lineId]);
     res.status(200).json({ message: 'Yard line deleted successfully' });
   } catch (error) {
     console.error('Error deleting yard line:', error);
+    if (error.code === '23503') { // Foreign key constraint violation
+      return res.status(400).json({ message: 'Cannot delete line because it is currently in use.' });
+    }
     res.status(500).json({ message: 'Server error deleting yard line' });
   }
 };

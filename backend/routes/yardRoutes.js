@@ -7,6 +7,10 @@ router.route('/')
   .get(protect, getYards)
   .post(protect, createYard);
 
+router.route('/assign')
+  .post(protect, assignYardToUser)
+  .delete(protect, removeYardAssignment);
+
 router.route('/:yardId')
   .delete(protect, deleteYard);
 
@@ -16,9 +20,5 @@ router.route('/:yardId/lines')
 
 router.route('/:yardId/lines/:lineId')
   .delete(protect, deleteYardLine);
-
-router.route('/assign')
-  .post(protect, assignYardToUser)
-  .delete(protect, removeYardAssignment);
 
 module.exports = router;

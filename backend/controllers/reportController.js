@@ -21,10 +21,31 @@ async function getReportData(reportType, filters, user) {
     let params = [];
     let conditions = [];
     
-    if (user.role === 'yard_admin') {
-       query += ` LEFT JOIN user_yard_assignments uya ON yl.yard_id = uya.yard_id AND uya.user_id = $1 `;
-       params.push(user.id);
-       conditions.push(`(d.assigned_line_id IS NULL OR uya.yard_id IS NOT NULL)`);
+    if (user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(user.role)) {
+      let yardWhere = '';
+      if (user.role === 'zone_admin') {
+        if (user.assignedZones && user.assignedZones.length > 0) {
+          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($${params.length + 1}))`;
+          params.push(user.assignedZones);
+        } else {
+          yardWhere = `= -1`;
+        }
+      } else if (user.role === 'division_admin') {
+        if (user.assignedDivisions && user.assignedDivisions.length > 0) {
+          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($${params.length + 1}))`;
+          params.push(user.assignedDivisions);
+        } else {
+          yardWhere = `= -1`;
+        }
+      } else {
+        if (user.assignedYardIds && user.assignedYardIds.length > 0) {
+          yardWhere = `= ANY($${params.length + 1}::int[])`;
+          params.push(user.assignedYardIds);
+        } else {
+          yardWhere = `= -1`;
+        }
+      }
+      conditions.push(`(COALESCE(d.yard_id, yl.yard_id) ${yardWhere} OR COALESCE(d.yard_id, yl.yard_id) IS NULL)`);
     }
     
     if (yardId) {
@@ -63,9 +84,31 @@ async function getReportData(reportType, filters, user) {
     `;
     let params = [];
     
-    if (user.role === 'yard_admin') {
-       params.push(user.id);
-       query += ` AND (COALESCE(d.yard_id, dr.yard_id) IN (SELECT yard_id FROM user_yard_assignments WHERE user_id = $${params.length}) OR COALESCE(d.yard_id, dr.yard_id) IS NULL) `;
+    if (user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(user.role)) {
+      let yardWhere = '';
+      if (user.role === 'zone_admin') {
+        if (user.assignedZones && user.assignedZones.length > 0) {
+          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($${params.length + 1}))`;
+          params.push(user.assignedZones);
+        } else {
+          yardWhere = `= -1`;
+        }
+      } else if (user.role === 'division_admin') {
+        if (user.assignedDivisions && user.assignedDivisions.length > 0) {
+          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($${params.length + 1}))`;
+          params.push(user.assignedDivisions);
+        } else {
+          yardWhere = `= -1`;
+        }
+      } else {
+        if (user.assignedYardIds && user.assignedYardIds.length > 0) {
+          yardWhere = `= ANY($${params.length + 1}::int[])`;
+          params.push(user.assignedYardIds);
+        } else {
+          yardWhere = `= -1`;
+        }
+      }
+      query += ` AND (COALESCE(d.yard_id, dr.yard_id) ${yardWhere} OR COALESCE(d.yard_id, dr.yard_id) IS NULL) `;
     }
     
     if (filters && filters.fromDate && filters.toDate) {
@@ -107,10 +150,31 @@ async function getReportData(reportType, filters, user) {
     let params = [];
     let conditions = [];
     
-    if (user.role === 'yard_admin') {
-       query += ` JOIN user_yard_assignments uya ON yl.yard_id = uya.yard_id `;
-       params.push(user.id);
-       conditions.push(`uya.user_id = $${params.length}`);
+    if (user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(user.role)) {
+      let yardWhere = '';
+      if (user.role === 'zone_admin') {
+        if (user.assignedZones && user.assignedZones.length > 0) {
+          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($${params.length + 1}))`;
+          params.push(user.assignedZones);
+        } else {
+          yardWhere = `= -1`;
+        }
+      } else if (user.role === 'division_admin') {
+        if (user.assignedDivisions && user.assignedDivisions.length > 0) {
+          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($${params.length + 1}))`;
+          params.push(user.assignedDivisions);
+        } else {
+          yardWhere = `= -1`;
+        }
+      } else {
+        if (user.assignedYardIds && user.assignedYardIds.length > 0) {
+          yardWhere = `= ANY($${params.length + 1}::int[])`;
+          params.push(user.assignedYardIds);
+        } else {
+          yardWhere = `= -1`;
+        }
+      }
+      conditions.push(`(COALESCE(d.yard_id, yl.yard_id) ${yardWhere} OR COALESCE(d.yard_id, yl.yard_id) IS NULL)`);
     }
     
     if (yardId) {
@@ -791,6 +855,33 @@ exports.generateRangeReportPDF = async (req, res) => {
        } else {
           sessionsQuery += ` AND EXTRACT(EPOCH FROM (COALESCE(ss.end_time, ss.session_end) - COALESCE(ss.start_time, ss.session_start, ss.created_at))) / 60 ${op} ${parseFloat(dur_val)}`;
        }
+    }
+
+    if (req.user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(req.user.role)) {
+      let yardWhere = '';
+      if (req.user.role === 'zone_admin') {
+        if (req.user.assignedZones && req.user.assignedZones.length > 0) {
+          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($${params.length + 1}))`;
+          params.push(req.user.assignedZones);
+        } else {
+          yardWhere = `= -1`;
+        }
+      } else if (req.user.role === 'division_admin') {
+        if (req.user.assignedDivisions && req.user.assignedDivisions.length > 0) {
+          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($${params.length + 1}))`;
+          params.push(req.user.assignedDivisions);
+        } else {
+          yardWhere = `= -1`;
+        }
+      } else {
+        if (req.user.assignedYardIds && req.user.assignedYardIds.length > 0) {
+          yardWhere = `= ANY($${params.length + 1}::int[])`;
+          params.push(req.user.assignedYardIds);
+        } else {
+          yardWhere = `= -1`;
+        }
+      }
+      sessionsQuery += ` AND (ss.yard_id ${yardWhere} OR ss.yard_id IS NULL)`;
     }
 
     let sortCol = "COALESCE(ss.start_time, ss.session_start, ss.created_at)";

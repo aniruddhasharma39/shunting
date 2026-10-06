@@ -49,6 +49,28 @@ CREATE TABLE IF NOT EXISTS user_yard_assignments (
 CREATE INDEX IF NOT EXISTS idx_user_yard_assignments_user_id ON user_yard_assignments(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_yard_assignments_yard_id ON user_yard_assignments(yard_id);
 
+-- 3A. USER ZONE ASSIGNMENTS (Zone Admins)
+CREATE TABLE IF NOT EXISTS user_zone_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    zone_name VARCHAR(100) NOT NULL,
+    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    assigned_by UUID REFERENCES users(id),
+    UNIQUE(user_id, zone_name)
+);
+CREATE INDEX IF NOT EXISTS idx_user_zone_assignments_user_id ON user_zone_assignments(user_id);
+
+-- 3B. USER DIVISION ASSIGNMENTS (Division Admins)
+CREATE TABLE IF NOT EXISTS user_division_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    division_name VARCHAR(100) NOT NULL,
+    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    assigned_by UUID REFERENCES users(id),
+    UNIQUE(user_id, division_name)
+);
+CREATE INDEX IF NOT EXISTS idx_user_division_assignments_user_id ON user_division_assignments(user_id);
+
 -- 4. YARD LINES TABLE
 CREATE TABLE IF NOT EXISTS yard_lines (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

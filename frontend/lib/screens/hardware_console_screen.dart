@@ -211,7 +211,7 @@ class _HardwareConsoleScreenState extends State<HardwareConsoleScreen> {
           ),
         ),
       ),
-      floatingActionButton: (session.isHardwareEngineer || session.isSuperAdmin)
+      floatingActionButton: (session.isMaintenanceUser || session.isSuperAdmin)
           ? FloatingActionButton.extended(
               onPressed: () => _showAddDeviceModal(context),
               backgroundColor: const Color(0xFF0284C7),

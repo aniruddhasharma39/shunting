@@ -130,11 +130,13 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         const Text('CONFIGURED LINES', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.subtitleColor, letterSpacing: 1.0)),
-                        Row(
+                        Wrap(
+                          spacing: 8.0,
                           children: [
                             TextButton.icon(
                               onPressed: () => _showDeleteYardDialog(yard),
@@ -310,8 +312,8 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
 
   void _handleUnassign(dynamic line) {
     final String assignedCode = line['assigned_de'];
-    final dev = _allDevices.firstWhere((d) => d['device_code'] == assignedCode, orElse: () => null);
-    if (dev == null) return;
+    final String? assignedDeviceId = line['assigned_device_id']?.toString();
+    if (assignedDeviceId == null) return;
     
     showDialog(
       context: context,
@@ -329,7 +331,7 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                 builder: (context) => const Center(child: CircularProgressIndicator())
               );
               
-              final result = await ApiService.assignDeviceToLine(dev['id'].toString(), null);
+              final result = await ApiService.assignDeviceToLine(assignedDeviceId, null);
               
               if (mounted) {
                  Navigator.pop(context); // close loading

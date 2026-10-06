@@ -86,22 +86,51 @@ class AppDrawer extends StatelessWidget {
                       style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
                     ),
                   ),
-                  // Show assigned yards for Yard Admin
-                  if (session.isYardAdmin && session.assignedYards.isNotEmpty) ...[
+                  // Show assignments based on role
+                  if (session.isZoneAdmin) ...[
                     const SizedBox(height: 6),
-                    Text(
-                      'Yards: ${session.assignedYardNames.join(", ")}',
-                      style: const TextStyle(color: Colors.white70, fontSize: 11),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    if (session.assignedZones.isNotEmpty)
+                      Text(
+                        'Zones: ${session.assignedZones.join(", ")}',
+                        style: const TextStyle(color: Colors.white70, fontSize: 11),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    else
+                      const Text(
+                        '⚠ No zones assigned',
+                        style: TextStyle(color: Colors.orangeAccent, fontSize: 11),
+                      ),
                   ],
-                  if (session.isYardAdmin && session.assignedYards.isEmpty) ...[
+                  if (session.isDivisionAdmin) ...[
                     const SizedBox(height: 6),
-                    const Text(
-                      '⚠ No yards assigned',
-                      style: TextStyle(color: Colors.orangeAccent, fontSize: 11),
-                    ),
+                    if (session.assignedDivisions.isNotEmpty)
+                      Text(
+                        'Divisions: ${session.assignedDivisions.join(", ")}',
+                        style: const TextStyle(color: Colors.white70, fontSize: 11),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    else
+                      const Text(
+                        '⚠ No divisions assigned',
+                        style: TextStyle(color: Colors.orangeAccent, fontSize: 11),
+                      ),
+                  ],
+                  if (session.isYardAdmin || session.isShuntingSupervisor || session.isShunter) ...[
+                    const SizedBox(height: 6),
+                    if (session.assignedYards.isNotEmpty)
+                      Text(
+                        'Yards: ${session.assignedYardNames.join(", ")}',
+                        style: const TextStyle(color: Colors.white70, fontSize: 11),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    else
+                      const Text(
+                        '⚠ No yards assigned',
+                        style: TextStyle(color: Colors.orangeAccent, fontSize: 11),
+                      ),
                   ],
                 ],
               ),
@@ -174,14 +203,16 @@ class AppDrawer extends StatelessWidget {
     switch (role) {
       case UserSession.roleSuperAdmin:
         return const Color(0xFFDC2626); // Red for super admin
+      case UserSession.roleZoneAdmin:
+        return const Color(0xFF9333EA); // Purple for zone admin
+      case UserSession.roleDivisionAdmin:
+        return const Color(0xFF0284C7); // Light blue for division admin
       case UserSession.roleYardAdmin:
         return const Color(0xFF2563EB); // Blue for yard admin
-      case UserSession.roleHardwareEngineer:
-        return const Color(0xFF0284C7); // Sky blue for hardware engineer
-      case UserSession.roleMaintenanceUser:
-        return const Color(0xFFD97706); // Amber for maintenance
-      case UserSession.roleViewer:
-        return const Color(0xFF059669); // Green for viewer
+      case UserSession.roleShuntingSupervisor:
+        return const Color(0xFF0D9488); // Teal for supervisor
+      case UserSession.roleShunter:
+        return const Color(0xFF65A30D); // Lime for shunter
       default:
         return AppTheme.subtitleColor;
     }

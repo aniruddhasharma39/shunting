@@ -24,18 +24,18 @@ router.route('/telemetry/live')
 router.route('/telemetry')
   .post(ingestDeviceTelemetry); // Can be called by Lambda or authenticated client
 
-// Accessible by hardware_engineer, super_admin, maintenance_user, yard_admin, viewer
+// Accessible by super_admin, zone_admin, division_admin, yard_admin
 router.route('/')
-  .get(verifyToken, requireRole('super_admin', 'hardware_engineer', 'maintenance_user', 'yard_admin', 'viewer'), getRegistryDevices)
-  .post(verifyToken, requireRole('super_admin', 'hardware_engineer', 'yard_admin'), upload.fields([{ name: 'device_image', maxCount: 1 }, { name: 'device_sim', maxCount: 1 }]), upsertRegistryDevice);
+  .get(verifyToken, requireRole('super_admin', 'zone_admin', 'division_admin', 'yard_admin'), getRegistryDevices)
+  .post(verifyToken, requireRole('super_admin', 'yard_admin'), upload.fields([{ name: 'device_image', maxCount: 1 }, { name: 'device_sim', maxCount: 1 }]), upsertRegistryDevice);
 
 router.route('/:deviceId')
-  .get(verifyToken, requireRole('super_admin', 'hardware_engineer', 'maintenance_user', 'yard_admin', 'viewer'), getRegistryDeviceById)
-  .delete(verifyToken, requireRole('super_admin', 'hardware_engineer', 'yard_admin'), deleteRegistryDevice);
+  .get(verifyToken, requireRole('super_admin', 'zone_admin', 'division_admin', 'yard_admin'), getRegistryDeviceById)
+  .delete(verifyToken, requireRole('super_admin', 'yard_admin'), deleteRegistryDevice);
 
 router.route('/:deviceId/images')
-  .post(verifyToken, requireRole('super_admin', 'hardware_engineer', 'yard_admin'), upload.fields([{ name: 'device_image', maxCount: 1 }, { name: 'device_sim', maxCount: 1 }]), uploadDeviceImagesOnly);
+  .post(verifyToken, requireRole('super_admin', 'yard_admin'), upload.fields([{ name: 'device_image', maxCount: 1 }, { name: 'device_sim', maxCount: 1 }]), uploadDeviceImagesOnly);
 
-router.put('/:deviceId/toggle-disabled', verifyToken, requireRole('super_admin', 'hardware_engineer', 'yard_admin'), toggleRegistryDeviceDisabled);
+router.put('/:deviceId/toggle-disabled', verifyToken, requireRole('super_admin', 'yard_admin'), toggleRegistryDeviceDisabled);
 
 module.exports = router;

@@ -20,13 +20,16 @@ class UserSession {
   String? token;
   String? profilePicUrl;
   List<Map<String, dynamic>> assignedYards = [];
+  List<String> assignedZones = [];
+  List<String> assignedDivisions = [];
 
   // Role constants
   static const String roleSuperAdmin = 'super_admin';
+  static const String roleZoneAdmin = 'zone_admin';
+  static const String roleDivisionAdmin = 'division_admin';
   static const String roleYardAdmin = 'yard_admin';
-  static const String roleMaintenanceUser = 'maintenance_user';
-  static const String roleHardwareEngineer = 'hardware_engineer';
-  static const String roleViewer = 'viewer';
+  static const String roleShuntingSupervisor = 'supervisor';
+  static const String roleShunter = 'shunter';
 
   static const String _prefKeySession = 'user_session_cache_v1';
 
@@ -38,7 +41,7 @@ class UserSession {
     employeeId = user['employeeId'];
     email = user['email'];
     designation = user['designation'];
-    role = user['role'] ?? roleViewer;
+    role = user['role'] ?? roleShunter;
     token = data['token'];
     profilePicUrl = user['profilePicUrl'];
 
@@ -49,6 +52,18 @@ class UserSession {
       );
     } else {
       assignedYards = [];
+    }
+    
+    if (user['assignedZones'] != null && user['assignedZones'] is List) {
+      assignedZones = List<String>.from(user['assignedZones']);
+    } else {
+      assignedZones = [];
+    }
+
+    if (user['assignedDivisions'] != null && user['assignedDivisions'] is List) {
+      assignedDivisions = List<String>.from(user['assignedDivisions']);
+    } else {
+      assignedDivisions = [];
     }
 
     await saveToPreferences();
@@ -68,6 +83,8 @@ class UserSession {
         'token': token,
         'profilePicUrl': profilePicUrl,
         'assignedYards': assignedYards,
+        'assignedZones': assignedZones,
+        'assignedDivisions': assignedDivisions,
       };
       await prefs.setString(_prefKeySession, jsonEncode(map));
     } catch (_) {
@@ -90,7 +107,7 @@ class UserSession {
       employeeId = map['employeeId'];
       email = map['email'];
       designation = map['designation'];
-      role = map['role'] ?? roleViewer;
+      role = map['role'] ?? roleShunter;
       token = map['token'];
       profilePicUrl = map['profilePicUrl'];
 
@@ -100,6 +117,18 @@ class UserSession {
         );
       } else {
         assignedYards = [];
+      }
+
+      if (map['assignedZones'] != null && map['assignedZones'] is List) {
+        assignedZones = List<String>.from(map['assignedZones']);
+      } else {
+        assignedZones = [];
+      }
+
+      if (map['assignedDivisions'] != null && map['assignedDivisions'] is List) {
+        assignedDivisions = List<String>.from(map['assignedDivisions']);
+      } else {
+        assignedDivisions = [];
       }
       return isLoggedIn;
     } catch (_) {
@@ -118,6 +147,8 @@ class UserSession {
     token = null;
     profilePicUrl = null;
     assignedYards = [];
+    assignedZones = [];
+    assignedDivisions = [];
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -127,27 +158,28 @@ class UserSession {
 
   // Role check helpers
   bool get isSuperAdmin => role == roleSuperAdmin;
+  bool get isZoneAdmin => role == roleZoneAdmin;
+  bool get isDivisionAdmin => role == roleDivisionAdmin;
   bool get isYardAdmin => role == roleYardAdmin;
-  bool get isMaintenanceUser => role == roleMaintenanceUser;
-  bool get isHardwareEngineer => role == roleHardwareEngineer;
-  bool get isViewer => role == roleViewer;
+  bool get isShuntingSupervisor => role == roleShuntingSupervisor;
+  bool get isShunter => role == roleShunter;
 
   /// Whether this user can configure yards (create/edit yards and lines)
-  bool get canConfigureYards => isSuperAdmin;
+  bool get canConfigureYards => isSuperAdmin || isZoneAdmin || isDivisionAdmin;
 
   /// Whether this user can manage devices (register/edit/inventory)
-  bool get canManageDevices => isSuperAdmin || isYardAdmin || isHardwareEngineer || isMaintenanceUser;
+  bool get canManageDevices => isSuperAdmin || isZoneAdmin || isDivisionAdmin || isYardAdmin;
 
   /// Whether this user can issue/return portable devices
-  bool get canIssueReturn => isSuperAdmin || isYardAdmin;
+  bool get canIssueReturn => isSuperAdmin || isZoneAdmin || isDivisionAdmin || isYardAdmin || isShuntingSupervisor || isShunter;
 
-  /// Whether this user can manage users (Super Admin only)
-  bool get canManageUsers => isSuperAdmin;
+  /// Whether this user can manage users (Super Admin, Zone, Division, Yard Admin)
+  bool get canManageUsers => isSuperAdmin || isZoneAdmin || isDivisionAdmin || isYardAdmin;
 
-  /// Whether this user can access Hardware Console (Super Admin, Hardware Engineer, Maintenance)
-  bool get canAccessHardwareConsole => isSuperAdmin || isHardwareEngineer || isMaintenanceUser;
+  /// Whether this user can access Hardware Console
+  bool get canAccessHardwareConsole => isSuperAdmin || isZoneAdmin || isDivisionAdmin;
 
-  /// Whether this user can view sessions (All roles)
+  /// Whether this user can view sessions (All roles except limited maintenance perhaps, but keeping it true)
   bool get canViewSessions => true;
 
   /// Whether the user is logged in
@@ -158,14 +190,16 @@ class UserSession {
     switch (role) {
       case roleSuperAdmin:
         return 'Super Administrator';
+      case roleZoneAdmin:
+        return 'Zone Administrator';
+      case roleDivisionAdmin:
+        return 'Division Administrator';
       case roleYardAdmin:
         return 'Yard Administrator';
-      case roleMaintenanceUser:
-        return 'Maintenance User';
-      case roleHardwareEngineer:
-        return 'Hardware Engineer';
-      case roleViewer:
-        return 'Viewer / Control Room';
+      case roleShuntingSupervisor:
+        return 'Shunting Supervisor';
+      case roleShunter:
+        return 'Shunter';
       default:
         return designation ?? 'Unknown';
     }

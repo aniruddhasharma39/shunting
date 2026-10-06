@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+const fs = require('fs');
+
+const code = `import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/user_session.dart';
@@ -87,39 +89,40 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   }
 
   Future<void> _deleteUser(Map<String, dynamic> user) async {
+    final TextEditingController inputController = TextEditingController();
+    final String expectedEmail = user['email'] ?? '';
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
-            SizedBox(width: 10),
-            Text('Confirm Deletion', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Text(
-          'Are you sure you want to delete ${user['fullName']}? This action cannot be undone.',
-          style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
-        ),
-        actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white60, fontSize: 14)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      builder: (ctx) => StatefulBuilder(builder: (stateCtx, setDs) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: Text('Delete \${user['fullName']}?', style: const TextStyle(color: Colors.white, fontSize: 16)),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text("Type the user's email to confirm:", style: TextStyle(color: Colors.white70, fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: inputController,
+              onChanged: (_) => setDs(() {}),
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: expectedEmail,
+                hintStyle: const TextStyle(color: Colors.white38),
+                border: const OutlineInputBorder(),
+                enabledBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: Colors.redAccent)),
+              ),
             ),
-            child: const Text('Delete User'),
-          ),
-        ],
-      ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Colors.white60))),
+            ElevatedButton(
+              onPressed: inputController.text.trim() == expectedEmail.trim() ? () => Navigator.pop(ctx, true) : null,
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, disabledBackgroundColor: Colors.redAccent.withValues(alpha: 0.3)),
+              child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      }),
     );
     if (result == true) {
       final res = await ApiService.deleteUser(user['id'].toString());
@@ -140,14 +143,14 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     await showDialog(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(builder: (stateCtx, setDs) => AlertDialog(
-        title: Text('Assign Yard to ${user['fullName']}'),
+        title: Text('Assign Yard to \${user['fullName']}'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           const Text('Select a yard to assign:', style: TextStyle(fontSize: 14)),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             decoration: const InputDecoration(hintText: 'Select yard', border: OutlineInputBorder()),
             initialValue: selectedYardId,
-            items: availableYards.map((y) => DropdownMenuItem<String>(value: y['id']?.toString(), child: Text('${y['yard_name']}'))).toList(),
+            items: availableYards.map((y) => DropdownMenuItem<String>(value: y['id']?.toString(), child: Text('\${y['yard_name']}'))).toList(),
             onChanged: (value) => setDs(() { selectedYardId = value; }),
           ),
         ]),
@@ -162,45 +165,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               _loadData();
             },
             child: const Text('Assign'),
-          ),
-        ],
-      )),
-    );
-  }
-
-  Future<void> _showRemoveYardDialog(Map<String, dynamic> user) async {
-    final assignedYards = List<Map<String, dynamic>>.from(user['assignedYards'] ?? []);
-    if (assignedYards.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No yards to remove.')));
-      return;
-    }
-    String? selectedYardId;
-    await showDialog(
-      context: context,
-      builder: (dialogCtx) => StatefulBuilder(builder: (stateCtx, setDs) => AlertDialog(
-        title: Text('Remove Yard from ${user['fullName']}'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Select a yard to remove:', style: TextStyle(fontSize: 14)),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            decoration: const InputDecoration(hintText: 'Select yard', border: OutlineInputBorder()),
-            initialValue: selectedYardId,
-            items: assignedYards.map((y) => DropdownMenuItem<String>(value: y['id']?.toString(), child: Text('${y['yard_name']}'))).toList(),
-            onChanged: (value) => setDs(() { selectedYardId = value; }),
-          ),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: selectedYardId == null ? null : () async {
-              Navigator.pop(context);
-              final result = await ApiService.removeYardAssignment(userId: user['id'].toString(), yardId: selectedYardId!);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message'] ?? 'Done'), backgroundColor: result['success'] ? Colors.green : Colors.red));
-              _loadData();
-            },
-            child: const Text('Remove', style: TextStyle(color: Colors.white)),
           ),
         ],
       )),
@@ -283,61 +247,47 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   }
 
   Widget _buildTree() {
-    final session = UserSession();
     final superAdmins = _byRole('super_admin');
     final zoneAdmins = _byRole('zone_admin');
     final linkedDiv = <String>{};
     final linkedYard = <String>{};
     final linkedOps = <String>{};
 
-    List<_TreeNode> buildOpsChildren(Map<String, dynamic> ya) {
-      final ops = _operatorsForYardAdmin(ya);
-      for (final o in ops) linkedOps.add(o['id'].toString());
-      return ops.map((op) => _TreeNode(user: op, children: const [])).toList();
-    }
-
-    List<_TreeNode> buildYardChildren(Map<String, dynamic> da) {
-      final yardAdmins = _yardAdminsForDiv(da);
-      for (final y in yardAdmins) linkedYard.add(y['id'].toString());
-      return yardAdmins.map((ya) => _TreeNode(user: ya, children: buildOpsChildren(ya))).toList();
-    }
-
-    List<_TreeNode> buildDivChildren(Map<String, dynamic> za) {
-      final divAdmins = _divAdminsForZone(za);
-      for (final d in divAdmins) linkedDiv.add(d['id'].toString());
-      return divAdmins.map((da) => _TreeNode(user: da, children: buildYardChildren(da))).toList();
-    }
-
     List<_TreeNode> buildZoneChildren(Map<String, dynamic> sa) {
-      return zoneAdmins.map((za) => _TreeNode(user: za, children: buildDivChildren(za))).toList();
+      return zoneAdmins.map((za) {
+        final divAdmins = _divAdminsForZone(za);
+        for (final d in divAdmins) linkedDiv.add(d['id'].toString());
+        return _TreeNode(
+          user: za,
+          children: divAdmins.map((da) {
+            final yardAdmins = _yardAdminsForDiv(da);
+            for (final y in yardAdmins) linkedYard.add(y['id'].toString());
+            return _TreeNode(
+              user: da,
+              children: yardAdmins.map((ya) {
+                final ops = _operatorsForYardAdmin(ya);
+                for (final o in ops) linkedOps.add(o['id'].toString());
+                return _TreeNode(user: ya, children: ops.map((op) => _TreeNode(user: op, children: const [])).toList());
+              }).toList(),
+            );
+          }).toList(),
+        );
+      }).toList();
     }
 
-    List<_TreeNode> roots = [];
+    final List<_TreeNode> roots = superAdmins.map((sa) => _TreeNode(user: sa, children: buildZoneChildren(sa))).toList();
 
-    if (session.isSuperAdmin) {
-      roots = superAdmins.map((sa) => _TreeNode(user: sa, children: buildZoneChildren(sa))).toList();
-      
-      // Unlinked division admins
-      for (final da in _byRole('division_admin').where((u) => !linkedDiv.contains(u['id'].toString()))) {
-        roots.add(_TreeNode(user: da, children: []));
-      }
-      // Unlinked yard admins
-      for (final ya in _byRole('yard_admin').where((u) => !linkedYard.contains(u['id'].toString()))) {
-        roots.add(_TreeNode(user: ya, children: []));
-      }
-      // Unlinked operators
-      for (final op in _users.where((u) => (u['role'] == 'supervisor' || u['role'] == 'shunter') && !linkedOps.contains(u['id'].toString()))) {
-        roots.add(_TreeNode(user: op, children: []));
-      }
-    } else if (session.isZoneAdmin) {
-      final myZoneAdmins = zoneAdmins.where((za) => za['id'].toString() == session.id).toList();
-      roots = myZoneAdmins.map((za) => _TreeNode(user: za, children: buildDivChildren(za))).toList();
-    } else if (session.isDivisionAdmin) {
-      final myDivAdmins = _byRole('division_admin').where((da) => da['id'].toString() == session.id).toList();
-      roots = myDivAdmins.map((da) => _TreeNode(user: da, children: buildYardChildren(da))).toList();
-    } else if (session.isYardAdmin) {
-      final myYardAdmins = _byRole('yard_admin').where((ya) => ya['id'].toString() == session.id).toList();
-      roots = myYardAdmins.map((ya) => _TreeNode(user: ya, children: buildOpsChildren(ya))).toList();
+    // Unlinked division admins
+    for (final da in _byRole('division_admin').where((u) => !linkedDiv.contains(u['id'].toString()))) {
+      roots.add(_TreeNode(user: da, children: []));
+    }
+    // Unlinked yard admins
+    for (final ya in _byRole('yard_admin').where((u) => !linkedYard.contains(u['id'].toString()))) {
+      roots.add(_TreeNode(user: ya, children: []));
+    }
+    // Unlinked operators
+    for (final op in _users.where((u) => (u['role'] == 'supervisor' || u['role'] == 'shunter') && !linkedOps.contains(u['id'].toString()))) {
+      roots.add(_TreeNode(user: op, children: []));
     }
 
     return ListView(
@@ -351,7 +301,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         onToggleActive: _toggleUserActive,
         onDelete: _deleteUser,
         onAssignYard: _showAssignYardDialog,
-        onRemoveYard: _showRemoveYardDialog,
       )).toList(),
     );
   }
@@ -376,7 +325,6 @@ class _TreeNodeWidget extends StatefulWidget {
   final Future<void> Function(Map<String, dynamic>) onToggleActive;
   final Future<void> Function(Map<String, dynamic>) onDelete;
   final Future<void> Function(Map<String, dynamic>) onAssignYard;
-  final Future<void> Function(Map<String, dynamic>) onRemoveYard;
 
   const _TreeNodeWidget({
     required this.node,
@@ -387,7 +335,6 @@ class _TreeNodeWidget extends StatefulWidget {
     required this.onToggleActive,
     required this.onDelete,
     required this.onAssignYard,
-    required this.onRemoveYard,
   });
 
   @override
@@ -395,7 +342,7 @@ class _TreeNodeWidget extends StatefulWidget {
 }
 
 class _TreeNodeWidgetState extends State<_TreeNodeWidget> with SingleTickerProviderStateMixin {
-  bool _expanded = false;
+  bool _expanded = true;
   late AnimationController _ctrl;
   late Animation<double> _rot;
 
@@ -404,7 +351,7 @@ class _TreeNodeWidgetState extends State<_TreeNodeWidget> with SingleTickerProvi
     super.initState();
     _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 220));
     _rot = Tween<double>(begin: 0, end: 0.5).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
-    _ctrl.value = 0.0;
+    _ctrl.value = 1.0;
   }
 
   @override
@@ -494,7 +441,7 @@ class _TreeNodeWidgetState extends State<_TreeNodeWidget> with SingleTickerProvi
                         ],
                       ]),
                       const SizedBox(height: 2),
-                      Text('${user['employeeId'] ?? ''} • ${user['email'] ?? ''}', style: const TextStyle(color: Colors.white54, fontSize: 10.5), overflow: TextOverflow.ellipsis),
+                      Text('\${user['employeeId'] ?? ''} • \${user['email'] ?? ''}', style: const TextStyle(color: Colors.white54, fontSize: 10.5), overflow: TextOverflow.ellipsis),
                       _buildChips(user, role, roleColor),
                     ])),
                     // Badge + expand arrow
@@ -517,9 +464,7 @@ class _TreeNodeWidgetState extends State<_TreeNodeWidget> with SingleTickerProvi
                   decoration: BoxDecoration(border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.06)))),
                   child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                     if (['yard_admin', 'supervisor', 'shunter'].contains(role)) ...[
-                      _Btn(label: 'Assign', icon: Icons.add_location_alt_outlined, color: Colors.cyanAccent, onTap: () => widget.onAssignYard(user)),
-                      const SizedBox(width: 8),
-                      _Btn(label: 'Remove', icon: Icons.wrong_location_outlined, color: Colors.deepOrangeAccent, onTap: () => widget.onRemoveYard(user)),
+                      _Btn(label: 'Assign Yard', icon: Icons.add_location_alt_outlined, color: Colors.cyanAccent, onTap: () => widget.onAssignYard(user)),
                       const SizedBox(width: 10),
                     ],
                     _Btn(label: isActive ? 'Deactivate' : 'Activate', icon: isActive ? Icons.pause_circle_outline : Icons.play_circle_outline, color: isActive ? Colors.orange : Colors.green, onTap: () => widget.onToggleActive(user)),
@@ -544,7 +489,6 @@ class _TreeNodeWidgetState extends State<_TreeNodeWidget> with SingleTickerProvi
                 onToggleActive: widget.onToggleActive,
                 onDelete: widget.onDelete,
                 onAssignYard: widget.onAssignYard,
-                onRemoveYard: widget.onRemoveYard,
               )).toList(),
             ),
         ],
@@ -572,7 +516,7 @@ class _TreeNodeWidgetState extends State<_TreeNodeWidget> with SingleTickerProvi
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(4)),
-            child: Text('+${chips.length - 3} more', style: const TextStyle(color: Colors.white54, fontSize: 9)),
+            child: Text('+\${chips.length - 3} more', style: const TextStyle(color: Colors.white54, fontSize: 9)),
           ),
       ]),
     );
@@ -598,3 +542,8 @@ class _Btn extends StatelessWidget {
     ]),
   );
 }
+`;
+
+const target = 'C:/Users/KRISHNA KHIRBADODIYA/Desktop/VASP Systemic/Shunting/frontend/lib/screens/user_management_screen.dart';
+fs.writeFileSync(target, code, 'utf8');
+console.log('Written:', target, fs.statSync(target).size, 'bytes');

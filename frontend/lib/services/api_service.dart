@@ -6,7 +6,7 @@ import 'user_session.dart';
 
 class ApiService {
   // Set to true to test with your local backend, false to use the AWS backend
-  static const bool useLocalhost = false;
+  static const bool useLocalhost = true;
 
   // IMPORTANT:
   // - For Web/Chrome testing: '127.0.0.1' or 'localhost'
@@ -45,6 +45,10 @@ class ApiService {
     required String designation,
     required String password,
     bool isAdminCreatingUser = false,
+    List<String>? assignedZones,
+    List<String>? assignedDivisions,
+    List<String>? assignedYards,
+    String? parentZone,
   }) async {
     try {
       final headers = isAdminCreatingUser ? _authHeaders() : {'Content-Type': 'application/json'};
@@ -59,6 +63,10 @@ class ApiService {
           'designation': designation,
           'password': password,
           'isAdminCreatingUser': isAdminCreatingUser,
+          if (assignedZones != null) 'assignedZones': assignedZones,
+          if (assignedDivisions != null) 'assignedDivisions': assignedDivisions,
+          if (assignedYards != null) 'assignedYards': assignedYards,
+          if (parentZone != null) 'parentZone': parentZone,
         }),
       );
 
@@ -162,6 +170,58 @@ class ApiService {
     }
   }
 
+  /// Fetch all distinct zones (from zone admins) for dropdowns
+  static Future<List<String>> fetchZones() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/auth/zones'), headers: _authHeaders());
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<String>.from(data['zones'] ?? []);
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  /// Fetch all distinct divisions (from division admins) for dropdowns
+  static Future<List<String>> fetchDivisions() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/auth/divisions'), headers: _authHeaders());
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<String>.from(data['divisions'] ?? []);
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  /// Remove a zone assignment from a user
+  static Future<Map<String, dynamic>> removeZoneAssignment({required String userId, required String zoneName}) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/auth/users/$userId/zone/${Uri.encodeComponent(zoneName)}'),
+        headers: _authHeaders(),
+      );
+      final data = jsonDecode(response.body);
+      return {'success': response.statusCode == 200, 'message': data['message'] ?? 'Done'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error.'};
+    }
+  }
+
+  /// Remove a division assignment from a user
+  static Future<Map<String, dynamic>> removeDivisionAssignment({required String userId, required String divisionName}) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/auth/users/$userId/division/${Uri.encodeComponent(divisionName)}'),
+        headers: _authHeaders(),
+      );
+      final data = jsonDecode(response.body);
+      return {'success': response.statusCode == 200, 'message': data['message'] ?? 'Done'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error.'};
+    }
+  }
+
   /// Assign a yard to a user (Super Admin only)
   static Future<Map<String, dynamic>> assignYardToUser({
     required String userId,
@@ -188,6 +248,7 @@ class ApiService {
       return {'success': false, 'message': 'Network error.'};
     }
   }
+
 
   /// Remove yard assignment from a user (Super Admin only)
   static Future<Map<String, dynamic>> removeYardAssignment({
