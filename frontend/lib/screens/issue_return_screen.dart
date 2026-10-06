@@ -57,7 +57,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
       
       if (usersResult['success']) {
         final allUsers = usersResult['data'] as List<dynamic>;
-        _locoPilots = allUsers.where((u) => u['role'] == 'loco_pilot').toList();
+        _locoPilots = allUsers.where((u) => ['loco_pilot', 'shunter', 'supervisor'].contains(u['role'])).toList();
       }
 
       setState(() => _isLoading = false);
@@ -380,12 +380,8 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
 
   void _showReturnDialog(dynamic assignment) {
     final remarksController = TextEditingController();
+    final faultController = TextEditingController();
     bool isSubmitting = false;
-    
-    // We need the device_id to return it. Since session only gives device_code, we need to map it.
-    // However, the backend return API takes `device_id`.
-    // Let's modify ApiService.returnDevice to take device_code, OR we can look up the ID from _availableLDs. 
-    // Actually _availableLDs doesn't have it because it's issued. We should fetch all devices and find the ID.
     
     showDialog(
       context: context,
@@ -408,6 +404,17 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                   ),
                 ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: faultController,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    hintText: 'Reason for defect (if any)',
+                    filled: true,
+                    fillColor: AppTheme.backgroundColor,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                  ),
+                ),
               ],
             ),
             actions: [
@@ -416,7 +423,11 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                 onPressed: isSubmitting ? null : () async {
                   setDialogState(() => isSubmitting = true);
                   
-                  final result = await ApiService.returnDevice(assignment['id'].toString(), remarksController.text);
+                  final result = await ApiService.returnDevice(
+                    assignment['id'].toString(), 
+                    remarksController.text, 
+                    faultReported: faultController.text,
+                  );
                   if (mounted) {
                      if (result['success']) {
                         Navigator.pop(context);

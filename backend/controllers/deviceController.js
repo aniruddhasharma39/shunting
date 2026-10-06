@@ -155,32 +155,7 @@ const getDevices = async (req, res) => {
 
     const params = [];
 
-    if (req.user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(req.user.role)) {
-      let yardWhere = '';
-      if (req.user.role === 'zone_admin') {
-        if (req.user.assignedZones && req.user.assignedZones.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($${params.length + 1}))`;
-          params.push(req.user.assignedZones);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else if (req.user.role === 'division_admin') {
-        if (req.user.assignedDivisions && req.user.assignedDivisions.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($${params.length + 1}))`;
-          params.push(req.user.assignedDivisions);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else {
-        if (req.user.assignedYardIds && req.user.assignedYardIds.length > 0) {
-          yardWhere = `= ANY($${params.length + 1}::int[])`;
-          params.push(req.user.assignedYardIds);
-        } else {
-          yardWhere = `= -1`;
-        }
-      }
-      query += ` AND (COALESCE(d.yard_id, dr.yard_id, yl.yard_id) ${yardWhere} OR COALESCE(d.yard_id, dr.yard_id, yl.yard_id) IS NULL)`;
-    }
+    // Removed role-based filtering per user request to show all devices for all levels
 
     if (search && search.trim() !== '') {
       params.push(`%${search.trim()}%`);
@@ -480,36 +455,7 @@ const getDeviceAssignments = async (req, res) => {
       params.push(...deviceList);
     }
     
-    // Add role-based filter if needed
-    if (req.user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(req.user.role)) {
-      let yardWhere = '';
-      if (req.user.role === 'zone_admin') {
-        if (req.user.assignedZones && req.user.assignedZones.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($${params.length + 1}))`;
-          params.push(req.user.assignedZones);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else if (req.user.role === 'division_admin') {
-        if (req.user.assignedDivisions && req.user.assignedDivisions.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($${params.length + 1}))`;
-          params.push(req.user.assignedDivisions);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else {
-        if (req.user.assignedYardIds && req.user.assignedYardIds.length > 0) {
-          yardWhere = `= ANY($${params.length + 1}::int[])`;
-          params.push(req.user.assignedYardIds);
-        } else {
-          yardWhere = `= -1`;
-        }
-      }
-      query += ` AND (
-        COALESCE(d.yard_id, dr.yard_id) ${yardWhere}
-        OR COALESCE(d.yard_id, dr.yard_id) IS NULL
-      )`;
-    }
+    // Removed role-based filtering per user request to show all device assignments for all levels
 
     query += ' ORDER BY da.issued_at DESC LIMIT 500';
 

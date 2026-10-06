@@ -100,6 +100,8 @@ const getRegistryDevices = async (req, res) => {
 
     const params = [];
 
+    // Removed strict role-based access control (RBAC) per user request to show all devices
+
     if (search && search.trim() !== '') {
       params.push(`%${search.trim()}%`);
       const pIdx = params.length;
@@ -145,19 +147,11 @@ const getRegistryDevices = async (req, res) => {
       devices = devices.filter(d => d.computed_status === health_status);
     }
 
-    // Compute stats summary across all devices using the 30-second rule
-    const statsResult = await db.query(`
-      SELECT 
-        COUNT(*)::int AS total_devices,
-        COUNT(CASE WHEN GREATEST(dr.last_reading_timestamp, dt.latest_telemetry_time) >= (NOW() - INTERVAL '30 SECONDS') THEN 1 END)::int AS online_count,
-        COUNT(CASE WHEN GREATEST(dr.last_reading_timestamp, dt.latest_telemetry_time) < (NOW() - INTERVAL '30 SECONDS') OR (dr.last_reading_timestamp IS NULL AND dt.latest_telemetry_time IS NULL) THEN 1 END)::int AS offline_count
-      FROM device_registry dr
-      LEFT JOIN (
-        SELECT device_id, MAX(recorded_at) AS latest_telemetry_time
-        FROM device_telemetry
-        GROUP BY device_id
-      ) dt ON dr.device_id = dt.device_id
-    `);
+    // Compute stats summary across the filtered devices using the 30-second rule in-memory
+    // This perfectly aligns the summary numbers with the visible filtered list
+    const onlineCount = devices.filter(d => d.computed_status === 'ONLINE').length;
+    const offlineCount = devices.filter(d => d.computed_status === 'OFFLINE').length;
+    const totalDevices = devices.length;
 
     // Calculate total sensors configured across all devices
     let totalSensors = 0;
@@ -168,9 +162,9 @@ const getRegistryDevices = async (req, res) => {
     }
 
     const summary = {
-      totalDevices: statsResult.rows[0]?.total_devices || devices.length,
-      onlineCount: statsResult.rows[0]?.online_count || 0,
-      offlineCount: statsResult.rows[0]?.offline_count || 0,
+      totalDevices: totalDevices,
+      onlineCount: onlineCount,
+      offlineCount: offlineCount,
       totalSensors: totalSensors
     };
 

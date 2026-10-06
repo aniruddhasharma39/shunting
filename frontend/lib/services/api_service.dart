@@ -6,7 +6,7 @@ import 'user_session.dart';
 
 class ApiService {
   // Set to true to test with your local backend, false to use the AWS backend
-  static const bool useLocalhost = true;
+  static const bool useLocalhost = false;
 
   // IMPORTANT:
   // - For Web/Chrome testing: '127.0.0.1' or 'localhost'
@@ -492,12 +492,12 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> returnDevice(String assignmentId, String remarks) async {
+  static Future<Map<String, dynamic>> returnDevice(String assignmentId, String remarks, {String? faultReported}) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/devices/return'),
         headers: _authHeaders(),
-        body: jsonEncode({'assignment_id': assignmentId, 'remarks': remarks})
+        body: jsonEncode({'assignment_id': assignmentId, 'remarks': remarks, 'fault_reported': faultReported})
       );
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) return {'success': true, 'data': data};

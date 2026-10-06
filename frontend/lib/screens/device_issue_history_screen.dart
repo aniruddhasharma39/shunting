@@ -406,7 +406,22 @@ class _DeviceIssueHistoryScreenState extends State<DeviceIssueHistoryScreen> {
                                       ),
                                       child: Text("Remarks: ${record['remarks']}", style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
                                     ),
-                                  ]
+                                  ],
+                                  
+                                  // Defect Reason
+                                  if (record['fault_reported'] != null && record['fault_reported'].toString().isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.shade50,
+                                        border: Border.all(color: Colors.red.shade200),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text("Defect Reason: ${record['fault_reported']}", style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),

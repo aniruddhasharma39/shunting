@@ -108,36 +108,7 @@ const getSessions = async (req, res) => {
       paramIndex++;
     }
 
-    if (req.user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(req.user.role)) {
-      let yardWhere = '';
-      if (req.user.role === 'zone_admin') {
-        if (req.user.assignedZones && req.user.assignedZones.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($${paramIndex}))`;
-          ssParams.push(req.user.assignedZones);
-          paramIndex++;
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else if (req.user.role === 'division_admin') {
-        if (req.user.assignedDivisions && req.user.assignedDivisions.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($${paramIndex}))`;
-          ssParams.push(req.user.assignedDivisions);
-          paramIndex++;
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else {
-        if (req.user.assignedYardIds && req.user.assignedYardIds.length > 0) {
-          yardWhere = `= ANY($${paramIndex}::int[])`;
-          ssParams.push(req.user.assignedYardIds);
-          paramIndex++;
-        } else {
-          yardWhere = `= -1`;
-        }
-      }
-      ssWhere.push(`(ss.yard_id ${yardWhere} OR ss.yard_id IS NULL)`);
-    }
-
+    // Removed role-based filtering per user request to show all sessions for all levels
     if (ssWhere.length > 0) {
       ssQuery += ` WHERE ` + ssWhere.join(' AND ');
     }
@@ -339,37 +310,7 @@ const getSessionDetailsWithLogs = async (req, res) => {
     `;
     let ssParams = [id];
     
-    if (req.user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(req.user.role)) {
-      let yardWhere = '';
-      if (req.user.role === 'zone_admin') {
-        if (req.user.assignedZones && req.user.assignedZones.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($2))`;
-          ssParams.push(req.user.assignedZones);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else if (req.user.role === 'division_admin') {
-        if (req.user.assignedDivisions && req.user.assignedDivisions.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($2))`;
-          ssParams.push(req.user.assignedDivisions);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else {
-        if (req.user.assignedYardIds && req.user.assignedYardIds.length > 0) {
-          yardWhere = `= ANY($2::int[])`;
-          ssParams.push(req.user.assignedYardIds);
-        } else {
-          yardWhere = `= -1`;
-        }
-      }
-      if (ssParams.length > 1) {
-          ssQuery += ` AND (ss.yard_id ${yardWhere} OR ss.yard_id IS NULL)`;
-      } else {
-          ssQuery += ` AND (1=0)`;
-      }
-    }
-    
+    // Removed role-based filtering per user request    
     ssQuery += ` LIMIT 1`;
     const ssRes = await db.query(ssQuery, ssParams);
 
@@ -569,37 +510,7 @@ const getSessionsForRangeReport = async (req, res) => {
     
     let params = [from_date, to_date];
     
-    if (req.user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(req.user.role)) {
-      let yardWhere = '';
-      if (req.user.role === 'zone_admin') {
-        if (req.user.assignedZones && req.user.assignedZones.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($3))`;
-          params.push(req.user.assignedZones);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else if (req.user.role === 'division_admin') {
-        if (req.user.assignedDivisions && req.user.assignedDivisions.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($3))`;
-          params.push(req.user.assignedDivisions);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else {
-        if (req.user.assignedYardIds && req.user.assignedYardIds.length > 0) {
-          yardWhere = `= ANY($3::int[])`;
-          params.push(req.user.assignedYardIds);
-        } else {
-          yardWhere = `= -1`;
-        }
-      }
-      
-      if (params.length > 2) {
-          sessionsQuery += ` AND (ss.yard_id ${yardWhere} OR ss.yard_id IS NULL)`;
-      } else {
-          sessionsQuery += ` AND (1=0)`;
-      }
-    }
+    // Removed role-based filtering per user request
 
     sessionsQuery += `
       ORDER BY COALESCE(ss.start_time, ss.session_start, ss.created_at) ASC

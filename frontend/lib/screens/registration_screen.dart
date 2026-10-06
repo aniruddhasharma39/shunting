@@ -35,8 +35,17 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   List<String> get _designations {
     final role = UserSession().role;
-    if (widget.isAdminCreatingUser && role == 'yard_admin') {
-      return ['Shunting Supervisor', 'Shunter'];
+    if (widget.isAdminCreatingUser) {
+      if (role == 'yard_admin') {
+        return ['Shunting Supervisor', 'Shunter'];
+      } else if (role == 'zone_admin') {
+        return [
+          'Division Administrator',
+          'Yard Administrator',
+          'Shunting Supervisor',
+          'Shunter',
+        ];
+      }
     }
     return [
       'Zone Administrator',
@@ -61,7 +70,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       final yardsRes = await ApiService.fetchYards();
       if (!mounted) return;
       setState(() {
-        _availableZones = zones;
+        if (UserSession().role == 'zone_admin') {
+          _availableZones = UserSession().assignedZones;
+        } else {
+          _availableZones = zones;
+        }
         _availableDivisions = divisions;
         if (yardsRes['success']) {
           _availableYards = List<Map<String, dynamic>>.from(yardsRes['data'] ?? []);

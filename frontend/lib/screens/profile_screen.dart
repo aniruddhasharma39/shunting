@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import '../theme/app_theme.dart';
 import '../services/user_session.dart';
+import '../services/api_service.dart';
 import '../widgets/app_drawer.dart';
 import 'login_screen.dart';
 
@@ -26,7 +27,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final session = UserSession();
-      final request = http.MultipartRequest('POST', Uri.parse('https://shunting-backend.onrender.com/api/auth/profile/picture'));
+      final request = http.MultipartRequest('POST', Uri.parse('${ApiService.baseUrl}/auth/profile/picture'));
       request.headers['Authorization'] = 'Bearer ${session.token}';
       
       final bytes = await image.readAsBytes();
@@ -64,7 +65,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final session = UserSession();
       final response = await http.delete(
-        Uri.parse('https://shunting-backend.onrender.com/api/auth/profile/picture'),
+        Uri.parse('${ApiService.baseUrl}/auth/profile/picture'),
         headers: {
           'Authorization': 'Bearer ${session.token}',
         },
@@ -96,6 +97,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final session = UserSession();
+    final String baseHost = ApiService.baseUrl.replaceAll('/api', '');
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -133,7 +135,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                       image: session.profilePicUrl != null
                           ? DecorationImage(
-                              image: NetworkImage('https://shunting-backend.onrender.com${session.profilePicUrl}'),
+                              image: NetworkImage('$baseHost${session.profilePicUrl}'),
                               fit: BoxFit.cover,
                             )
                           : null,

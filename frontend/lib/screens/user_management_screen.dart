@@ -248,7 +248,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isSuperAdmin = UserSession().role == 'super_admin';
+    final session = UserSession();
+    final isSuperAdmin = session.isSuperAdmin;
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
@@ -268,7 +269,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           : _errorMessage != null
               ? Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.redAccent)))
               : _buildTree(),
-      floatingActionButton: isSuperAdmin
+      floatingActionButton: isSuperAdmin || session.isZoneAdmin
           ? FloatingActionButton.extended(
               onPressed: () async {
                 await Navigator.push(context, MaterialPageRoute(builder: (_) => const RegistrationScreen(isAdminCreatingUser: true)));

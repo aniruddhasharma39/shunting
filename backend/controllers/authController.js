@@ -387,6 +387,15 @@ exports.toggleUserActive = async (req, res) => {
       }
     }
 
+    // Role Hierarchy check for zone_admin
+    if (req.user.role === 'zone_admin') {
+      const targetUserCheck = await db.query('SELECT role FROM users WHERE id = $1', [id]);
+      if (targetUserCheck.rows.length === 0) return res.status(404).json({ message: 'User not found' });
+      if (['super_admin', 'zone_admin'].includes(targetUserCheck.rows[0].role)) {
+        return res.status(403).json({ message: 'Forbidden: You do not have permission to manage this user role.' });
+      }
+    }
+
     const result = await db.query(
       'UPDATE users SET is_active = NOT is_active WHERE id = $1 RETURNING id, full_name, is_active',
       [id]
@@ -422,6 +431,15 @@ exports.deleteUser = async (req, res) => {
       const targetUserCheck = await db.query('SELECT role FROM users WHERE id = $1', [id]);
       if (targetUserCheck.rows.length === 0) return res.status(404).json({ message: 'User not found' });
       if (!['supervisor', 'shunter'].includes(targetUserCheck.rows[0].role)) {
+        return res.status(403).json({ message: 'Forbidden: You do not have permission to manage this user role.' });
+      }
+    }
+
+    // Role Hierarchy check for zone_admin
+    if (req.user.role === 'zone_admin') {
+      const targetUserCheck = await db.query('SELECT role FROM users WHERE id = $1', [id]);
+      if (targetUserCheck.rows.length === 0) return res.status(404).json({ message: 'User not found' });
+      if (['super_admin', 'zone_admin'].includes(targetUserCheck.rows[0].role)) {
         return res.status(403).json({ message: 'Forbidden: You do not have permission to manage this user role.' });
       }
     }

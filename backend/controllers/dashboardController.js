@@ -11,31 +11,17 @@ const getDashboardSummary = async (req, res) => {
     let yardParams = [];
     
     if (user && user.role === 'zone_admin') {
-      if (user.assignedZones && user.assignedZones.length > 0) {
-        yardWhereClause = `yard_id IN (SELECT id FROM yards WHERE zone = ANY($1))`;
-        yardParams.push(user.assignedZones);
-      } else {
-        yardWhereClause = `1=0`;
-      }
+      // The user wants to see ALL devices, regardless of zone or division, for KPIs.
+      yardWhereClause = '';
     } else if (user && user.role === 'division_admin') {
-      if (user.assignedDivisions && user.assignedDivisions.length > 0) {
-        yardWhereClause = `yard_id IN (SELECT id FROM yards WHERE division = ANY($1))`;
-        yardParams.push(user.assignedDivisions);
-      } else {
-        yardWhereClause = `1=0`;
-      }
+      yardWhereClause = '';
     } else if (user && ['yard_admin', 'supervisor', 'shunter'].includes(user.role)) {
-      if (user.assignedYardIds && user.assignedYardIds.length > 0) {
-        yardWhereClause = `yard_id = ANY($1::int[])`;
-        yardParams.push(user.assignedYardIds);
-      } else {
-        yardWhereClause = `1=0`;
-      }
+      yardWhereClause = '';
     }
 
-    const whereDr = yardWhereClause ? 'WHERE ' + yardWhereClause.replace('yard_id', 'dr.yard_id') : '';
-    const andSs = yardWhereClause ? 'AND ' + yardWhereClause.replace('yard_id', 'ss.yard_id') : '';
-    const andDr = yardWhereClause ? 'AND ' + yardWhereClause.replace('yard_id', 'dr.yard_id') : '';
+    const whereDr = yardWhereClause ? 'WHERE (' + yardWhereClause.replace(/yard_id/g, 'COALESCE(dr.yard_id, yl.yard_id)') + ' OR COALESCE(dr.yard_id, yl.yard_id) IS NULL)' : '';
+    const andSs = yardWhereClause ? 'AND (' + yardWhereClause.replace(/yard_id/g, 'ss.yard_id') + ' OR ss.yard_id IS NULL)' : '';
+    const andDr = yardWhereClause ? 'AND (' + yardWhereClause.replace(/yard_id/g, 'COALESCE(dr.yard_id, yl.yard_id)') + ' OR COALESCE(dr.yard_id, yl.yard_id) IS NULL)' : '';
 
     // Run background sweep to ensure stale sessions are transitioned to history
     awsIotBridge.sweepStaleSessions().catch(() => {});
@@ -52,6 +38,7 @@ const getDashboardSummary = async (req, res) => {
         FROM device_telemetry
         GROUP BY device_id
       ) dt ON dr.device_id = dt.device_id
+      LEFT JOIN yard_lines yl ON dr.assigned_line_id = yl.id
       ${whereDr}
     `;
     const countRes = await db.query(query1, yardParams);
@@ -183,6 +170,7 @@ const getDashboardSummary = async (req, res) => {
         SELECT DISTINCT ON (dt.device_id) dt.device_id, dt.topic, dt.payload, dt.distance_cm, dt.recorded_at
         FROM device_telemetry dt
         LEFT JOIN device_registry dr ON dt.device_id = dr.device_id
+        LEFT JOIN yard_lines yl ON dr.assigned_line_id = yl.id
         WHERE dt.recorded_at >= (NOW() - INTERVAL '60 SECONDS')
         ${andDr}
         ORDER BY dt.device_id, dt.recorded_at DESC

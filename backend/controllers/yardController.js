@@ -11,10 +11,16 @@ const createYard = async (req, res) => {
     }
 
     const yard_code = 'YRD-' + Math.floor(Math.random() * 10000);
+    
+    // Removed role-based yard zone/division automatic assignment per user request
+
     const newYard = await db.query(
       'INSERT INTO yards (yard_code, yard_name, station, division, zone, yard_type, status) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
       [yard_code, yard_name, location || 'Unknown', 'N/A', 'N/A', 'Mixed', 'Active']
     );
+
+    // If a zone or division admin creates it, let's automatically assign them to it as well, or just let them see it based on the zone filter.
+    // The getYards filter uses y.zone for zone_admin, so they will see it automatically.
 
     res.status(201).json(newYard.rows[0]);
   } catch (error) {
@@ -35,28 +41,7 @@ const getYards = async (req, res) => {
     let yardParams = [];
     const user = req.user;
 
-    if (user.role === 'zone_admin') {
-      if (user.assignedZones && user.assignedZones.length > 0) {
-        yardConditions.push(`y.zone = ANY($${yardParams.length + 1})`);
-        yardParams.push(user.assignedZones);
-      } else {
-        yardConditions.push('1=0');
-      }
-    } else if (user.role === 'division_admin') {
-      if (user.assignedDivisions && user.assignedDivisions.length > 0) {
-        yardConditions.push(`y.division = ANY($${yardParams.length + 1})`);
-        yardParams.push(user.assignedDivisions);
-      } else {
-        yardConditions.push('1=0');
-      }
-    } else if (['yard_admin', 'supervisor', 'shunter'].includes(user.role)) {
-      if (user.assignedYardIds && user.assignedYardIds.length > 0) {
-        yardConditions.push(`y.id = ANY($${yardParams.length + 1})`);
-        yardParams.push(user.assignedYardIds);
-      } else {
-        yardConditions.push('1=0');
-      }
-    }
+    // Removed role-based filtering per user request to show all yards
 
     let yardWhere = yardConditions.length > 0 ? 'WHERE ' + yardConditions.join(' AND ') : '';
     

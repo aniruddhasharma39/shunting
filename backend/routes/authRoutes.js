@@ -46,22 +46,22 @@ router.get('/users', verifyToken, requireRole('super_admin', 'zone_admin', 'divi
 
 // @route   PUT /api/auth/users/:id/toggle-active
 // @desc    Activate or deactivate a user
-// @access  Private (Super Admin only)
-router.put('/users/:id/toggle-active', verifyToken, requireRole('super_admin'), authController.toggleUserActive);
+// @access  Private (Super Admin, Zone Admin)
+router.put('/users/:id/toggle-active', verifyToken, requireRole('super_admin', 'zone_admin'), authController.toggleUserActive);
 
 // @route   DELETE /api/auth/users/:id/zone/:zoneName
 // @desc    Remove zone assignment from a user
-// @access  Private (Super Admin only)
-router.delete('/users/:id/zone/:zoneName', verifyToken, requireRole('super_admin'), authController.removeZoneAssignment);
+// @access  Private (Super Admin, Zone Admin)
+router.delete('/users/:id/zone/:zoneName', verifyToken, requireRole('super_admin', 'zone_admin'), authController.removeZoneAssignment);
 
 // @route   DELETE /api/auth/users/:id/division/:divisionName
 // @desc    Remove division assignment from a user
-// @access  Private (Super Admin only)
-router.delete('/users/:id/division/:divisionName', verifyToken, requireRole('super_admin'), authController.removeDivisionAssignment);
+// @access  Private (Super Admin, Zone Admin)
+router.delete('/users/:id/division/:divisionName', verifyToken, requireRole('super_admin', 'zone_admin'), authController.removeDivisionAssignment);
 
 // @route   DELETE /api/auth/users/:id
 // @desc    Delete a user completely
-// @access  Private (Super Admin only)
-router.delete('/users/:id', verifyToken, requireRole('super_admin'), authController.deleteUser);
+// @access  Private (Super Admin, Zone Admin)
+router.delete('/users/:id', verifyToken, requireRole('super_admin', 'zone_admin'), authController.deleteUser);
 
 module.exports = router;

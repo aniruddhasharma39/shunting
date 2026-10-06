@@ -529,7 +529,10 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: isSubmitting ? null : () async {
-                            if (nameController.text.trim().isEmpty || locationController.text.trim().isEmpty) return;
+                              if (nameController.text.trim().isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Yard name is required')));
+                                return;
+                              }
                             setModalState(() => isSubmitting = true);
                             final result = await ApiService.createYard(nameController.text.trim(), locationController.text.trim());
                             if (mounted) {
@@ -629,7 +632,10 @@ class _YardSetupScreenState extends State<YardSetupScreen> {
                           width: double.infinity,
                           child: ElevatedButton(
                             onPressed: isSubmitting ? null : () async {
-                              if (nameController.text.trim().isEmpty || codeController.text.trim().isEmpty) return;
+                              if (nameController.text.trim().isEmpty || codeController.text.trim().isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Line name and code are required')));
+                                return;
+                              }
                               setModalState(() => isSubmitting = true);
                               final result = await ApiService.addYardLine(yardId, nameController.text.trim(), codeController.text.trim());
                               if (mounted) {

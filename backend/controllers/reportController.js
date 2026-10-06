@@ -21,32 +21,7 @@ async function getReportData(reportType, filters, user) {
     let params = [];
     let conditions = [];
     
-    if (user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(user.role)) {
-      let yardWhere = '';
-      if (user.role === 'zone_admin') {
-        if (user.assignedZones && user.assignedZones.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($${params.length + 1}))`;
-          params.push(user.assignedZones);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else if (user.role === 'division_admin') {
-        if (user.assignedDivisions && user.assignedDivisions.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($${params.length + 1}))`;
-          params.push(user.assignedDivisions);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else {
-        if (user.assignedYardIds && user.assignedYardIds.length > 0) {
-          yardWhere = `= ANY($${params.length + 1}::int[])`;
-          params.push(user.assignedYardIds);
-        } else {
-          yardWhere = `= -1`;
-        }
-      }
-      conditions.push(`(COALESCE(d.yard_id, yl.yard_id) ${yardWhere} OR COALESCE(d.yard_id, yl.yard_id) IS NULL)`);
-    }
+    // Removed role filtering per user request to show all devices
     
     if (yardId) {
        params.push(yardId);
@@ -67,15 +42,15 @@ async function getReportData(reportType, filters, user) {
     tableData.rows = devices.rows.map(d => [d.device_code, d.device_type, d.battery_level || '--', d.condition_status, d.network_status]);
     
   } else if (reportType === 'Device History') {
-    tableData.headers = ['Device', 'Issued To', 'Issued At', 'Returned At', 'Remarks'];
+    tableData.headers = ['Device', 'Issued To', 'Issued At', 'Returned At', 'Remarks', 'Defect Reason'];
     
     let query = `
       SELECT 
         COALESCE(d.device_code, dr.device_id) as device_code, 
-        u.full_name, u.employee_id,
         da.issued_at + interval '5 hours 30 minutes' as issued_at, 
         da.returned_at + interval '5 hours 30 minutes' as returned_at, 
-        da.remarks
+        da.remarks,
+        da.fault_reported
       FROM device_assignments da
       LEFT JOIN devices d ON da.device_id = d.id
       LEFT JOIN device_registry dr ON d.device_code = dr.device_id OR d.id = dr.id
@@ -84,32 +59,7 @@ async function getReportData(reportType, filters, user) {
     `;
     let params = [];
     
-    if (user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(user.role)) {
-      let yardWhere = '';
-      if (user.role === 'zone_admin') {
-        if (user.assignedZones && user.assignedZones.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($${params.length + 1}))`;
-          params.push(user.assignedZones);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else if (user.role === 'division_admin') {
-        if (user.assignedDivisions && user.assignedDivisions.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($${params.length + 1}))`;
-          params.push(user.assignedDivisions);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else {
-        if (user.assignedYardIds && user.assignedYardIds.length > 0) {
-          yardWhere = `= ANY($${params.length + 1}::int[])`;
-          params.push(user.assignedYardIds);
-        } else {
-          yardWhere = `= -1`;
-        }
-      }
-      query += ` AND (COALESCE(d.yard_id, dr.yard_id) ${yardWhere} OR COALESCE(d.yard_id, dr.yard_id) IS NULL) `;
-    }
+    // Removed role filtering per user request to show all history
     
     if (filters && filters.fromDate && filters.toDate) {
        params.push(filters.fromDate);
@@ -125,13 +75,16 @@ async function getReportData(reportType, filters, user) {
     
     query += ` ORDER BY da.issued_at DESC LIMIT 500`;
     
+    tableData.headers = ['Device', 'Issued To', 'Issued At', 'Returned At', 'Remarks', 'Defect Reason'];
+
     const history = await db.query(query, params);
     tableData.rows = history.rows.map(h => [
       h.device_code || 'Unknown',
       `${h.full_name} (${h.employee_id})`,
       new Date(h.issued_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
       h.returned_at ? new Date(h.returned_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Active',
-      h.remarks || '--'
+      h.remarks || '--',
+      h.fault_reported || '--'
     ]);
   } else {
     // Sessions
@@ -150,32 +103,7 @@ async function getReportData(reportType, filters, user) {
     let params = [];
     let conditions = [];
     
-    if (user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(user.role)) {
-      let yardWhere = '';
-      if (user.role === 'zone_admin') {
-        if (user.assignedZones && user.assignedZones.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($${params.length + 1}))`;
-          params.push(user.assignedZones);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else if (user.role === 'division_admin') {
-        if (user.assignedDivisions && user.assignedDivisions.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($${params.length + 1}))`;
-          params.push(user.assignedDivisions);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else {
-        if (user.assignedYardIds && user.assignedYardIds.length > 0) {
-          yardWhere = `= ANY($${params.length + 1}::int[])`;
-          params.push(user.assignedYardIds);
-        } else {
-          yardWhere = `= -1`;
-        }
-      }
-      conditions.push(`(COALESCE(d.yard_id, yl.yard_id) ${yardWhere} OR COALESCE(d.yard_id, yl.yard_id) IS NULL)`);
-    }
+    // Removed role filtering per user request to show all sessions
     
     if (yardId) {
        params.push(yardId);
@@ -857,32 +785,7 @@ exports.generateRangeReportPDF = async (req, res) => {
        }
     }
 
-    if (req.user && ['zone_admin', 'division_admin', 'yard_admin', 'supervisor', 'shunter'].includes(req.user.role)) {
-      let yardWhere = '';
-      if (req.user.role === 'zone_admin') {
-        if (req.user.assignedZones && req.user.assignedZones.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE zone = ANY($${params.length + 1}))`;
-          params.push(req.user.assignedZones);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else if (req.user.role === 'division_admin') {
-        if (req.user.assignedDivisions && req.user.assignedDivisions.length > 0) {
-          yardWhere = `IN (SELECT id FROM yards WHERE division = ANY($${params.length + 1}))`;
-          params.push(req.user.assignedDivisions);
-        } else {
-          yardWhere = `= -1`;
-        }
-      } else {
-        if (req.user.assignedYardIds && req.user.assignedYardIds.length > 0) {
-          yardWhere = `= ANY($${params.length + 1}::int[])`;
-          params.push(req.user.assignedYardIds);
-        } else {
-          yardWhere = `= -1`;
-        }
-      }
-      sessionsQuery += ` AND (ss.yard_id ${yardWhere} OR ss.yard_id IS NULL)`;
-    }
+    // Removed role filtering per user request to show all sessions
 
     let sortCol = "COALESCE(ss.start_time, ss.session_start, ss.created_at)";
     if (sort_by === 'Session End') {
