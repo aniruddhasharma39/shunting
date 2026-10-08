@@ -344,13 +344,14 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
     );
   }
 
+  String? _unregSelectedDeviceId;
+  final _unregFullNameController = TextEditingController();
+  final _unregMobileController = TextEditingController();
+  XFile? _unregUserPhoto;
+  XFile? _unregIdCardPhoto;
+  bool _unregIsSubmitting = false;
+
   Widget _buildUnregisteredIssueTab() {
-    String? selectedDeviceId;
-    final fullNameController = TextEditingController();
-    final mobileController = TextEditingController();
-    XFile? userPhoto;
-    XFile? idCardPhoto;
-    bool isSubmitting = false;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
@@ -360,7 +361,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
             final ImagePicker picker = ImagePicker();
             final XFile? photo = await picker.pickImage(source: ImageSource.camera);
             if (photo != null) {
-              setTabState(() => userPhoto = photo);
+              setTabState(() => _unregUserPhoto = photo);
             }
           }
 
@@ -368,7 +369,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
             final ImagePicker picker = ImagePicker();
             final XFile? photo = await picker.pickImage(source: ImageSource.camera);
             if (photo != null) {
-              setTabState(() => idCardPhoto = photo);
+              setTabState(() => _unregIdCardPhoto = photo);
             }
           }
 
@@ -382,7 +383,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
               
               _buildDropdownLabel('Full Name'),
               TextField(
-                controller: fullNameController,
+                controller: _unregFullNameController,
                 decoration: InputDecoration(
                   hintText: 'Enter Full Name',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -394,7 +395,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
 
               _buildDropdownLabel('Mobile Number'),
               TextField(
-                controller: mobileController,
+                controller: _unregMobileController,
                 keyboardType: TextInputType.phone,
                 decoration: InputDecoration(
                   hintText: 'Enter 10-digit Mobile Number',
@@ -412,7 +413,8 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     isExpanded: true,
-                    value: (selectedDeviceId != null && _availableLDs.any((d) => d['id'].toString() == selectedDeviceId)) ? selectedDeviceId : null,
+                    itemHeight: 60.0,
+                    value: (_unregSelectedDeviceId != null && _availableLDs.any((d) => d['id'].toString() == _unregSelectedDeviceId)) ? _unregSelectedDeviceId : null,
                     hint: const Text('Select Device'),
                     items: _availableLDs.map((d) {
                       return DropdownMenuItem<String>(
@@ -420,7 +422,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                         child: Text('${d['device_code'] ?? d['device_id']} - ${d['battery_level'] ?? '--'}% Bat'),
                       );
                     }).toList(),
-                    onChanged: (val) => setTabState(() => selectedDeviceId = val),
+                    onChanged: (val) => setTabState(() => _unregSelectedDeviceId = val),
                   ),
                 ),
               ),
@@ -429,13 +431,15 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
               _buildDropdownLabel('User Photograph'),
               Row(
                 children: [
-                  ElevatedButton.icon(
-                    onPressed: captureUserPhoto,
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text('Capture User Photo'),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: captureUserPhoto,
+                      icon: const Icon(Icons.camera_alt),
+                      label: const Text('Capture User Photo'),
+                    ),
                   ),
                   const SizedBox(width: 16),
-                  if (userPhoto != null) const Icon(Icons.check_circle, color: Colors.green),
+                  if (_unregUserPhoto != null) const Icon(Icons.check_circle, color: Colors.green),
                 ],
               ),
               const SizedBox(height: 16),
@@ -443,13 +447,15 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
               _buildDropdownLabel('Railway ID Card Photograph'),
               Row(
                 children: [
-                  ElevatedButton.icon(
-                    onPressed: captureIdCardPhoto,
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text('Capture ID Card Photo'),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: captureIdCardPhoto,
+                      icon: const Icon(Icons.camera_alt),
+                      label: const Text('Capture ID Card Photo'),
+                    ),
                   ),
                   const SizedBox(width: 16),
-                  if (idCardPhoto != null) const Icon(Icons.check_circle, color: Colors.green),
+                  if (_unregIdCardPhoto != null) const Icon(Icons.check_circle, color: Colors.green),
                 ],
               ),
               const SizedBox(height: 32),
@@ -458,39 +464,39 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                 height: 50,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
-                  onPressed: isSubmitting ? null : () async {
-                    if (fullNameController.text.length < 3 || mobileController.text.length < 10 || selectedDeviceId == null || userPhoto == null || idCardPhoto == null) {
+                  onPressed: _unregIsSubmitting ? null : () async {
+                    if (_unregFullNameController.text.length < 3 || _unregMobileController.text.length < 10 || _unregSelectedDeviceId == null || _unregUserPhoto == null || _unregIdCardPhoto == null) {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields and capture both photos')));
                       return;
                     }
 
-                    setTabState(() => isSubmitting = true);
+                    setTabState(() => _unregIsSubmitting = true);
                     
                     final res = await ApiService.issueDeviceToUnregistered(
-                      deviceId: selectedDeviceId!,
-                      fullName: fullNameController.text.trim(),
-                      mobileNumber: mobileController.text.trim(),
-                      userPhoto: userPhoto!,
-                      idCardPhoto: idCardPhoto!,
+                      deviceId: _unregSelectedDeviceId!,
+                      fullName: _unregFullNameController.text.trim(),
+                      mobileNumber: _unregMobileController.text.trim(),
+                      userPhoto: _unregUserPhoto!,
+                      idCardPhoto: _unregIdCardPhoto!,
                     );
 
-                    setTabState(() => isSubmitting = false);
+                    setTabState(() => _unregIsSubmitting = false);
 
                     if (res['success']) {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Device issued successfully!')));
                       _fetchData();
-                      fullNameController.clear();
-                      mobileController.clear();
+                      _unregFullNameController.clear();
+                      _unregMobileController.clear();
                       setTabState(() {
-                        selectedDeviceId = null;
-                        userPhoto = null;
-                        idCardPhoto = null;
+                        _unregSelectedDeviceId = null;
+                        _unregUserPhoto = null;
+                        _unregIdCardPhoto = null;
                       });
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'])));
                     }
                   },
-                  child: isSubmitting 
+                  child: _unregIsSubmitting 
                       ? const CircularProgressIndicator(color: Colors.white)
                       : const Text('ISSUE DEVICE', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
