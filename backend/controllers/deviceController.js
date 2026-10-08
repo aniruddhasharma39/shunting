@@ -1,4 +1,19 @@
 const db = require('../config/db');
+const cloudinary = require('cloudinary').v2;
+
+async function uploadToCloudinary(fileBuffer, publicId) {
+  return new Promise((resolve, reject) => {
+    if (!process.env.CLOUDINARY_CLOUD_NAME) return resolve(null);
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { folder: 'shunting_issues', public_id: publicId },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result.secure_url);
+      }
+    );
+    uploadStream.end(fileBuffer);
+  });
+}
 
 // @desc    Register a new device
 // @route   POST /api/devices
@@ -129,10 +144,13 @@ const getDevices = async (req, res) => {
         CASE WHEN active_da.id IS NOT NULL THEN TRUE ELSE FALSE END as is_issued,
         active_da.id as active_assignment_id,
         active_da.employee_id as active_holder_id,
-        active_u.full_name as active_holder_name,
-        active_u.employee_id as active_holder_employee_id,
+        COALESCE(active_u.full_name, unreg_u.full_name) as active_holder_name,
+        COALESCE(active_u.employee_id, 'Unregistered (' || unreg_u.mobile_number || ')') as active_holder_employee_id,
         active_da.issued_at as active_issued_at,
-        active_da.condition_at_issue as active_condition
+        active_da.condition_at_issue as active_condition,
+        active_da.issue_type,
+        unreg_u.user_photo_url,
+        unreg_u.id_card_photo_url
       FROM device_registry dr
       LEFT JOIN devices d ON d.device_code = dr.device_id OR d.id = dr.id
       LEFT JOIN (
@@ -146,6 +164,7 @@ const getDevices = async (req, res) => {
         SELECT DISTINCT ON (device_id) * FROM device_assignments WHERE returned_at IS NULL ORDER BY device_id, issued_at DESC
       ) active_da ON d.id = active_da.device_id OR dr.id = active_da.device_id
       LEFT JOIN users active_u ON active_da.employee_id = active_u.id
+      LEFT JOIN issued_to_unregistered_users unreg_u ON active_da.unregistered_user_id = unreg_u.id
       WHERE 1=1
     `;
 
@@ -210,10 +229,13 @@ const getDevices = async (req, res) => {
 // @access  Yard Admin / Super Admin
 const issueDevice = async (req, res) => {
   try {
-    const { device_id, employee_id, condition_at_issue, assigned_line_id } = req.body;
+    const { device_id, employee_id, condition_at_issue, assigned_line_id, issue_type = 'REGISTERED', full_name, mobile_number, user_photo_url, id_card_photo_url, latitude, longitude, issued_by_user_id } = req.body;
 
-    if (!device_id || !employee_id) {
-      return res.status(400).json({ message: 'device_id and employee_id are required' });
+    if (!device_id) {
+      return res.status(400).json({ message: 'device_id is required' });
+    }
+    if (issue_type === 'REGISTERED' && !employee_id) {
+      return res.status(400).json({ message: 'employee_id is required for registered users' });
     }
 
     // Ensure device is not disabled
@@ -234,10 +256,33 @@ const issueDevice = async (req, res) => {
       return res.status(400).json({ message: 'Device is already issued. Please return it first.' });
     }
 
+    let unregisteredUserId = null;
+    if (issue_type === 'UNREGISTERED') {
+      let final_user_photo_url = user_photo_url;
+      let final_id_card_photo_url = id_card_photo_url;
+      
+      if (req.files) {
+        if (req.files.user_photo && req.files.user_photo.length > 0) {
+          final_user_photo_url = await uploadToCloudinary(req.files.user_photo[0].buffer, `user_photo_${Date.now()}`);
+        }
+        if (req.files.id_card_photo && req.files.id_card_photo.length > 0) {
+          final_id_card_photo_url = await uploadToCloudinary(req.files.id_card_photo[0].buffer, `id_card_photo_${Date.now()}`);
+        }
+      }
+
+      const unregisteredRes = await db.query(
+        `INSERT INTO issued_to_unregistered_users 
+         (full_name, mobile_number, user_photo_url, id_card_photo_url, issued_device_id, issued_by_user_id, latitude, longitude) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+        [full_name, mobile_number, final_user_photo_url || '', final_id_card_photo_url || '', device_id, issued_by_user_id || req.user?.id, latitude, longitude]
+      );
+      unregisteredUserId = unregisteredRes.rows[0].id;
+    }
+
     // Insert assignment
     const assignment = await db.query(
-      'INSERT INTO device_assignments (device_id, employee_id, condition_at_issue) VALUES ($1, $2, $3) RETURNING *',
-      [device_id, employee_id, condition_at_issue]
+      'INSERT INTO device_assignments (device_id, employee_id, condition_at_issue, issue_type, unregistered_user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [device_id, issue_type === 'REGISTERED' ? employee_id : null, condition_at_issue, issue_type, unregisteredUserId]
     );
 
     // Update device status and line assignment
@@ -424,18 +469,22 @@ const getDeviceAssignments = async (req, res) => {
         COALESCE(d.device_code, dr.device_id) as device_code,
         COALESCE(d.device_type, dr.product_type) as device_type,
         da.employee_id,
-        u.full_name as employee_name,
-        u.employee_id as employee_code,
+        COALESCE(u.full_name, unreg_u.full_name) as employee_name,
+        COALESCE(u.employee_id, 'Unregistered (' || unreg_u.mobile_number || ')') as employee_code,
         da.issued_at + interval '5 hours 30 minutes' as issued_at,
         da.returned_at + interval '5 hours 30 minutes' as returned_at,
         da.condition_at_issue,
         da.condition_at_return,
         da.fault_reported,
-        da.remarks
+        da.remarks,
+        da.issue_type,
+        unreg_u.user_photo_url,
+        unreg_u.id_card_photo_url
       FROM device_assignments da
       LEFT JOIN devices d ON da.device_id = d.id
       LEFT JOIN device_registry dr ON d.device_code = dr.device_id OR d.id = dr.id
       LEFT JOIN users u ON da.employee_id = u.id
+      LEFT JOIN issued_to_unregistered_users unreg_u ON da.unregistered_user_id = unreg_u.id
       WHERE 1=1
     `;
     

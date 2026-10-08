@@ -4,6 +4,7 @@ import '../widgets/app_drawer.dart';
 import '../services/api_service.dart';
 import '../services/user_session.dart';
 import 'device_issue_history_screen.dart';
+import 'package:image_picker/image_picker.dart';
 
 class IssueReturnScreen extends StatefulWidget {
   final int initialIndex;
@@ -52,7 +53,11 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
             'id': d['active_assignment_id'],
             'ldDevice': d['device_code'] ?? d['device_id'],
             'holder': d['active_holder_name'] ?? d['active_holder_employee_id'] ?? 'Unknown Employee',
+            'holderId': d['active_holder_employee_id'],
             'startTime': d['active_issued_at'],
+            'issueType': d['issue_type'] ?? 'REGISTERED',
+            'userPhoto': d['user_photo_url'],
+            'idCardPhoto': d['id_card_photo_url'],
           };
         }).toList();
 
@@ -114,7 +119,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
     }
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       initialIndex: widget.initialIndex,
       child: Scaffold(
         backgroundColor: AppTheme.backgroundColor,
@@ -137,7 +142,8 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white60,
             tabs: [
-              Tab(icon: Icon(Icons.outbox), text: 'ISSUE DEVICE'),
+              Tab(icon: Icon(Icons.person), text: 'REGISTERED ISSUE'),
+              Tab(icon: Icon(Icons.person_add), text: 'UNREGISTERED ISSUE'),
               Tab(icon: Icon(Icons.move_to_inbox), text: 'RETURN DEVICE'),
             ],
           ),
@@ -157,6 +163,7 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
             : TabBarView(
                 children: [
                   _buildIssueTab(),
+                  _buildUnregisteredIssueTab(),
                   _buildReturnTab(),
                 ],
               ),
@@ -337,6 +344,164 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
     );
   }
 
+  Widget _buildUnregisteredIssueTab() {
+    String? selectedDeviceId;
+    final fullNameController = TextEditingController();
+    final mobileController = TextEditingController();
+    XFile? userPhoto;
+    XFile? idCardPhoto;
+    bool isSubmitting = false;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24.0),
+      child: StatefulBuilder(
+        builder: (tabCtx, setTabState) {
+          Future<void> captureUserPhoto() async {
+            final ImagePicker picker = ImagePicker();
+            final XFile? photo = await picker.pickImage(source: ImageSource.camera);
+            if (photo != null) {
+              setTabState(() => userPhoto = photo);
+            }
+          }
+
+          Future<void> captureIdCardPhoto() async {
+            final ImagePicker picker = ImagePicker();
+            final XFile? photo = await picker.pickImage(source: ImageSource.camera);
+            if (photo != null) {
+              setTabState(() => idCardPhoto = photo);
+            }
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Issue to Unregistered Personnel', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+              const SizedBox(height: 8),
+              const Text('Issue device to staff without registered accounts. Camera captures are mandatory for accountability.', style: TextStyle(color: AppTheme.subtitleColor)),
+              const SizedBox(height: 24),
+              
+              _buildDropdownLabel('Full Name'),
+              TextField(
+                controller: fullNameController,
+                decoration: InputDecoration(
+                  hintText: 'Enter Full Name',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              _buildDropdownLabel('Mobile Number'),
+              TextField(
+                controller: mobileController,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  hintText: 'Enter 10-digit Mobile Number',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              _buildDropdownLabel('Select Available Loco Unit'),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.borderColor)),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    isExpanded: true,
+                    value: (selectedDeviceId != null && _availableLDs.any((d) => d['id'].toString() == selectedDeviceId)) ? selectedDeviceId : null,
+                    hint: const Text('Select Device'),
+                    items: _availableLDs.map((d) {
+                      return DropdownMenuItem<String>(
+                        value: d['id'].toString(),
+                        child: Text('${d['device_code'] ?? d['device_id']} - ${d['battery_level'] ?? '--'}% Bat'),
+                      );
+                    }).toList(),
+                    onChanged: (val) => setTabState(() => selectedDeviceId = val),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              _buildDropdownLabel('User Photograph'),
+              Row(
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: captureUserPhoto,
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text('Capture User Photo'),
+                  ),
+                  const SizedBox(width: 16),
+                  if (userPhoto != null) const Icon(Icons.check_circle, color: Colors.green),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              _buildDropdownLabel('Railway ID Card Photograph'),
+              Row(
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: captureIdCardPhoto,
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text('Capture ID Card Photo'),
+                  ),
+                  const SizedBox(width: 16),
+                  if (idCardPhoto != null) const Icon(Icons.check_circle, color: Colors.green),
+                ],
+              ),
+              const SizedBox(height: 32),
+
+              SizedBox(
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+                  onPressed: isSubmitting ? null : () async {
+                    if (fullNameController.text.length < 3 || mobileController.text.length < 10 || selectedDeviceId == null || userPhoto == null || idCardPhoto == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields and capture both photos')));
+                      return;
+                    }
+
+                    setTabState(() => isSubmitting = true);
+                    
+                    final res = await ApiService.issueDeviceToUnregistered(
+                      deviceId: selectedDeviceId!,
+                      fullName: fullNameController.text.trim(),
+                      mobileNumber: mobileController.text.trim(),
+                      userPhoto: userPhoto!,
+                      idCardPhoto: idCardPhoto!,
+                    );
+
+                    setTabState(() => isSubmitting = false);
+
+                    if (res['success']) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Device issued successfully!')));
+                      _fetchData();
+                      fullNameController.clear();
+                      mobileController.clear();
+                      setTabState(() {
+                        selectedDeviceId = null;
+                        userPhoto = null;
+                        idCardPhoto = null;
+                      });
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message'])));
+                    }
+                  },
+                  child: isSubmitting 
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text('ISSUE DEVICE', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                ),
+              ),
+            ],
+          );
+        }
+      )
+    );
+  }
+
   Widget _buildReturnTab() {
     if (_activeAssignments.isEmpty) {
        return ListView(
@@ -437,11 +602,38 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
         builder: (dialogCtx, setDialogState) {
           return AlertDialog(
             title: Text("Return ${assignment['ldDevice']}?"),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Process the return of this device.'),
-                const SizedBox(height: 16),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (assignment['issueType'] == 'UNREGISTERED') ...[
+                    const Text('Unregistered User Details', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+                    const SizedBox(height: 8),
+                    Text('Name: ${assignment['holder']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Mobile: ${assignment['holderId']}'),
+                    const SizedBox(height: 12),
+                    if (assignment['userPhoto'] != null && assignment['userPhoto'].toString().isNotEmpty)
+                      Column(
+                        children: [
+                          const Text('User Photo', style: TextStyle(fontSize: 12)),
+                          const SizedBox(height: 4),
+                          Image.network(assignment['userPhoto'], height: 80, fit: BoxFit.cover),
+                          const SizedBox(height: 8),
+                        ],
+                      ),
+                    if (assignment['idCardPhoto'] != null && assignment['idCardPhoto'].toString().isNotEmpty)
+                      Column(
+                        children: [
+                          const Text('ID Card Photo', style: TextStyle(fontSize: 12)),
+                          const SizedBox(height: 4),
+                          Image.network(assignment['idCardPhoto'], height: 80, fit: BoxFit.cover),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
+                    const Divider(),
+                  ],
+                  const Text('Process the return of this device.'),
+                  const SizedBox(height: 16),
                 TextField(
                   controller: remarksController,
                   maxLines: 2,
@@ -465,7 +657,8 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                 ),
               ],
             ),
-            actions: [
+          ),
+          actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
               TextButton(
                 onPressed: isSubmitting ? null : () async {

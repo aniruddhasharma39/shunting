@@ -134,10 +134,27 @@ CREATE INDEX IF NOT EXISTS idx_devices_device_code ON devices(device_code);
 CREATE INDEX IF NOT EXISTS idx_devices_assigned_line ON devices(assigned_line_id);
 
 -- 5A. DEVICE ASSIGNMENTS TABLE (Issue/Return Log used by Dashboard & Sessions)
+CREATE TABLE IF NOT EXISTS issued_to_unregistered_users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    full_name VARCHAR(100) NOT NULL,
+    mobile_number VARCHAR(20) NOT NULL,
+    user_photo_url TEXT NOT NULL,
+    id_card_photo_url TEXT NOT NULL,
+    issued_device_id UUID NOT NULL REFERENCES devices(id),
+    issued_by_user_id UUID REFERENCES users(id),
+    issue_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    latitude DECIMAL(10,7),
+    longitude DECIMAL(10,7),
+    status VARCHAR(30) DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS device_assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-    employee_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    employee_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    issue_type VARCHAR(20) DEFAULT 'REGISTERED',
+    unregistered_user_id UUID REFERENCES issued_to_unregistered_users(id) ON DELETE CASCADE,
     issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     returned_at TIMESTAMP,
     condition_at_issue VARCHAR(50) DEFAULT 'Good',

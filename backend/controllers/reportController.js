@@ -47,14 +47,18 @@ async function getReportData(reportType, filters, user) {
     let query = `
       SELECT 
         COALESCE(d.device_code, dr.device_id) as device_code, 
+        COALESCE(u.full_name, unreg_u.full_name) as full_name,
+        COALESCE(u.employee_id, 'Unregistered (' || unreg_u.mobile_number || ')') as employee_id,
         da.issued_at + interval '5 hours 30 minutes' as issued_at, 
         da.returned_at + interval '5 hours 30 minutes' as returned_at, 
         da.remarks,
-        da.fault_reported
+        da.fault_reported,
+        da.issue_type
       FROM device_assignments da
       LEFT JOIN devices d ON da.device_id = d.id
       LEFT JOIN device_registry dr ON d.device_code = dr.device_id OR d.id = dr.id
       LEFT JOIN users u ON da.employee_id = u.id
+      LEFT JOIN issued_to_unregistered_users unreg_u ON da.unregistered_user_id = unreg_u.id
       WHERE 1=1
     `;
     let params = [];

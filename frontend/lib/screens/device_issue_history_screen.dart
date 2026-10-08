@@ -19,6 +19,8 @@ class _DeviceIssueHistoryScreenState extends State<DeviceIssueHistoryScreen> {
   DateTime? _endDate;
   List<String> _allDevices = [];
   List<String> _selectedDevices = [];
+  String _searchQuery = '';
+  String _selectedIssueType = 'All Issues';
 
   @override
   void initState() {
@@ -250,42 +252,68 @@ class _DeviceIssueHistoryScreenState extends State<DeviceIssueHistoryScreen> {
           // Filter Bar
           Container(
             color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-            child: Row(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Column(
               children: [
-                Expanded(
-                  flex: 3,
-                  child: OutlinedButton.icon(
-                    onPressed: _selectDateRange,
-                    icon: const Icon(Icons.calendar_month, size: 18),
-                    label: Text(
-                      _startDate == null 
-                        ? 'All Dates' 
-                        : '${_startDate!.day}/${_startDate!.month} - ${_endDate!.day}/${_endDate!.month}',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.primaryColor,
-                      side: const BorderSide(color: AppTheme.borderColor),
-                    ),
+                TextField(
+                  decoration: const InputDecoration(
+                    hintText: 'Search Name, Mobile, Device, Date...',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                    isDense: true,
                   ),
+                  onChanged: (val) => setState(() => _searchQuery = val),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 2,
-                  child: OutlinedButton.icon(
-                    onPressed: _showDeviceFilter,
-                    icon: const Icon(Icons.devices, size: 18),
-                    label: Text(
-                      _selectedDevices.isEmpty ? 'All Devices' : '${_selectedDevices.length} Selected',
-                      style: const TextStyle(fontSize: 12),
-                      overflow: TextOverflow.ellipsis,
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedIssueType,
+                        decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                        items: ['All Issues', 'Registered Issues', 'Unregistered Issues']
+                            .map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 12))))
+                            .toList(),
+                        onChanged: (val) => setState(() => _selectedIssueType = val!),
+                      ),
                     ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.primaryColor,
-                      side: const BorderSide(color: AppTheme.borderColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: OutlinedButton.icon(
+                        onPressed: _selectDateRange,
+                        icon: const Icon(Icons.calendar_month, size: 18),
+                        label: Text(
+                          _startDate == null 
+                            ? 'All Dates' 
+                            : '${_startDate!.day}/${_startDate!.month} - ${_endDate!.day}/${_endDate!.month}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.primaryColor,
+                          side: const BorderSide(color: AppTheme.borderColor),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: OutlinedButton.icon(
+                        onPressed: _showDeviceFilter,
+                        icon: const Icon(Icons.devices, size: 18),
+                        label: Text(
+                          _selectedDevices.isEmpty ? 'All Devices' : '${_selectedDevices.length} Selected',
+                          style: const TextStyle(fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.primaryColor,
+                          side: const BorderSide(color: AppTheme.borderColor),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -295,13 +323,34 @@ class _DeviceIssueHistoryScreenState extends State<DeviceIssueHistoryScreen> {
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _history.isEmpty
-                    ? const Center(child: Text('No issue/return records found.', style: TextStyle(color: AppTheme.subtitleColor)))
-                    : ListView.builder(
+                : Builder(builder: (context) {
+                    List<dynamic> filteredHistory = _history.where((record) {
+                      if (_selectedIssueType == 'Registered Issues' && record['issue_type'] == 'UNREGISTERED') return false;
+                      if (_selectedIssueType == 'Unregistered Issues' && record['issue_type'] != 'UNREGISTERED') return false;
+                      
+                      if (_searchQuery.isNotEmpty) {
+                        final query = _searchQuery.toLowerCase();
+                        final name = (record['employee_name'] ?? '').toString().toLowerCase();
+                        final mobile = (record['employee_code'] ?? '').toString().toLowerCase();
+                        final device = (record['device_code'] ?? '').toString().toLowerCase();
+                        final date = (record['issued_at'] ?? '').toString().toLowerCase();
+                        
+                        if (!name.contains(query) && !mobile.contains(query) && !device.contains(query) && !date.contains(query)) {
+                          return false;
+                        }
+                      }
+                      return true;
+                    }).toList();
+
+                    if (filteredHistory.isEmpty) {
+                      return const Center(child: Text('No issue/return records found.', style: TextStyle(color: AppTheme.subtitleColor)));
+                    }
+                    
+                    return ListView.builder(
                         padding: const EdgeInsets.all(16.0),
-                        itemCount: _history.length,
+                        itemCount: filteredHistory.length,
                         itemBuilder: (context, index) {
-                          final record = _history[index];
+                          final record = filteredHistory[index];
                           final isReturned = record['returned_at'] != null;
 
                           return Card(
@@ -427,7 +476,8 @@ class _DeviceIssueHistoryScreenState extends State<DeviceIssueHistoryScreen> {
                             ),
                           );
                         },
-                      ),
+                      );
+                  }),
           ),
         ],
       ),

@@ -485,13 +485,52 @@ class ApiService {
       final response = await http.post(
         Uri.parse('$baseUrl/devices/issue'),
         headers: _authHeaders(),
-        body: jsonEncode({'device_id': deviceId, 'employee_id': employeeId, 'remarks': remarks})
+        body: jsonEncode({'device_id': deviceId, 'employee_id': employeeId, 'remarks': remarks, 'issue_type': 'REGISTERED'})
       );
       final data = jsonDecode(response.body);
       if (response.statusCode == 201) return {'success': true, 'data': data};
       return {'success': false, 'message': data['message'] ?? 'Failed to issue device'};
     } catch (e) {
       return {'success': false, 'message': 'Network error.'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> issueDeviceToUnregistered({
+    required String deviceId,
+    required String fullName,
+    required String mobileNumber,
+    required XFile userPhoto,
+    required XFile idCardPhoto,
+  }) async {
+    try {
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/devices/issue'));
+      
+      final token = UserSession().token;
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
+      request.fields['device_id'] = deviceId;
+      request.fields['issue_type'] = 'UNREGISTERED';
+      request.fields['full_name'] = fullName;
+      request.fields['mobile_number'] = mobileNumber;
+
+      final userPhotoBytes = await userPhoto.readAsBytes();
+      request.files.add(http.MultipartFile.fromBytes('user_photo', userPhotoBytes, filename: userPhoto.name));
+
+      final idCardPhotoBytes = await idCardPhoto.readAsBytes();
+      request.files.add(http.MultipartFile.fromBytes('id_card_photo', idCardPhotoBytes, filename: idCardPhoto.name));
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+      var data = jsonDecode(response.body);
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return {'success': true, 'data': data};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Failed to issue device'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error during issue.'};
     }
   }
 
