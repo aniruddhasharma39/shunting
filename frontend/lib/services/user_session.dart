@@ -43,7 +43,7 @@ class UserSession {
     designation = user['designation'];
     role = user['role'] ?? roleShunter;
     token = data['token'];
-    profilePicUrl = user['profilePicUrl'];
+    profilePicUrl = user['profilePicUrl'] ?? user['profile_pic_url'];
 
     // Parse assigned yards
     if (user['assignedYards'] != null && user['assignedYards'] is List) {

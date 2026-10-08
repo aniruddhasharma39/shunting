@@ -24,8 +24,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
   Future<void> _loadData() async {
     setState(() { _isLoading = true; _errorMessage = null; });
-    final usersResult = await ApiService.fetchUsers();
-    final yardsResult = await ApiService.fetchYards();
+    // Run both fetches in parallel — cuts load time ~50%
+    final results = await Future.wait([
+      ApiService.fetchUsers(),
+      ApiService.fetchYards(),
+    ]);
+    final usersResult = results[0];
+    final yardsResult = results[1];
     if (!mounted) return;
     setState(() {
       _isLoading = false;

@@ -3,6 +3,12 @@ const db = require('../config/db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'safeshunt_default_secret_key_change_me';
 
+// In-memory token cache: { token -> { user, expiry } }
+// Eliminates a DB lookup on every authenticated API request.
+// Cache TTL is 5 minutes — user changes (deactivation, role change) reflect within 5 minutes.
+const _tokenCache = new Map();
+const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 // Middleware: Verify JWT token and attach user to request
 const verifyToken = async (req, res, next) => {
   try {
@@ -18,6 +24,13 @@ const verifyToken = async (req, res, next) => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(decoded.id)) {
       return res.status(401).json({ message: 'Invalid or legacy token. Please login again.' });
+    }
+
+    // --- Cache check: skip DB if we have a fresh cached user ---
+    const cached = _tokenCache.get(token);
+    if (cached && cached.expiry > Date.now()) {
+      req.user = cached.user;
+      return next();
     }
 
     // Fetch user from DB to ensure they still exist and are active
@@ -72,6 +85,9 @@ const verifyToken = async (req, res, next) => {
       );
       req.user.assignedDivisions = divisionResult.rows.map(r => r.division_name);
     }
+
+    // Cache the user object for TOKEN_CACHE_TTL_MS
+    _tokenCache.set(token, { user: req.user, expiry: Date.now() + TOKEN_CACHE_TTL_MS });
 
     next();
   } catch (error) {

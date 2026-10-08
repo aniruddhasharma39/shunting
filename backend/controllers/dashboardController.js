@@ -1,6 +1,10 @@
 const db = require('../config/db');
 const awsIotBridge = require('../services/awsIotBridge');
 
+// Rate-limit the stale session sweep — only run it once every 60 seconds,
+// not on every 5-second dashboard poll. Prevents DB write saturation.
+let _lastSweepTime = 0;
+
 // @desc    Get dashboard summary statistics
 // @route   GET /api/dashboard/summary
 // @access  Private
@@ -24,7 +28,12 @@ const getDashboardSummary = async (req, res) => {
     const andDr = yardWhereClause ? 'AND (' + yardWhereClause.replace(/yard_id/g, 'COALESCE(dr.yard_id, yl.yard_id)') + ' OR COALESCE(dr.yard_id, yl.yard_id) IS NULL)' : '';
 
     // Run background sweep to ensure stale sessions are transitioned to history
-    awsIotBridge.sweepStaleSessions().catch(() => {});
+    // Rate-limited to once per 60 seconds to avoid DB saturation from polling
+    const now = Date.now();
+    if (now - _lastSweepTime > 60000) {
+      _lastSweepTime = now;
+      awsIotBridge.sweepStaleSessions().catch(() => {});
+    }
 
     // 1. Real Online count based on 45-second rule from device_telemetry & device_registry
     let query1 = `

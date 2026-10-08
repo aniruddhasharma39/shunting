@@ -299,40 +299,97 @@ exports.deleteProfilePicture = async (req, res) => {
 // GET /api/auth/users - List all users
 exports.listUsers = async (req, res) => {
   try {
-    let query = `SELECT id, full_name, employee_id, email, designation, role, is_active, created_at, profile_pic_url FROM users`;
+    let whereClause = '';
     let params = [];
-    
+
     if (req.user.role === 'yard_admin') {
-      query += ` WHERE role IN ('supervisor', 'shunter') OR id = $1`;
+      whereClause = ` WHERE u.role IN ('supervisor', 'shunter') OR u.id = $1`;
       params.push(req.user.id);
     } else if (req.user.role === 'supervisor') {
-      query += ` WHERE role = 'shunter' OR id = $1`;
+      whereClause = ` WHERE u.role = 'shunter' OR u.id = $1`;
       params.push(req.user.id);
     }
-    
-    query += ` ORDER BY created_at ASC`;
-    
-    const result = await db.query(query, params);
 
-    // For each user, fetch their assigned yards, zones, divisions
-    const users = await Promise.all(result.rows.map(async (user) => {
-      const yards = await getAssignedYards(user.id);
-      const zones = await getAssignedZones(user.id);
-      const divisions = await getAssignedDivisions(user.id);
-      return {
-        id: user.id,
-        fullName: user.full_name,
-        employeeId: user.employee_id,
-        email: user.email,
-        designation: user.designation,
-        role: user.role,
-        isActive: user.is_active,
-        createdAt: user.created_at,
-        profile_pic_url: user.profile_pic_url,
-        assignedYards: yards,
-        assignedZones: zones,
-        assignedDivisions: divisions,
-      };
+    // ─── Single batch query: fetch all users + their assignments in 4 total queries ───
+    // This replaces the old N+1 pattern (3 queries × N users = up to 90+ DB round-trips).
+
+    // 1. Fetch all users
+    const usersResult = await db.query(
+      `SELECT u.id, u.full_name, u.employee_id, u.email, u.designation,
+              u.role, u.is_active, u.created_at, u.profile_pic_url
+       FROM users u${whereClause} ORDER BY u.created_at ASC`,
+      params
+    );
+
+    if (usersResult.rows.length === 0) {
+      return res.status(200).json({ users: [] });
+    }
+
+    const userIds = usersResult.rows.map(u => u.id);
+
+    // 2. Batch-fetch all yard assignments for these users in ONE query
+    const yardsResult = await db.query(
+      `SELECT uya.user_id, y.id AS yard_id, y.yard_name, y.station AS location, y.status
+       FROM user_yard_assignments uya
+       JOIN yards y ON uya.yard_id = y.id
+       WHERE uya.user_id = ANY($1::uuid[]) AND y.status = 'Active'`,
+      [userIds]
+    );
+
+    // 3. Batch-fetch all zone assignments for these users in ONE query
+    const zonesResult = await db.query(
+      `SELECT user_id, zone_name
+       FROM user_zone_assignments
+       WHERE user_id = ANY($1::uuid[])`,
+      [userIds]
+    );
+
+    // 4. Batch-fetch all division assignments for these users in ONE query
+    const divisionsResult = await db.query(
+      `SELECT user_id, division_name
+       FROM user_division_assignments
+       WHERE user_id = ANY($1::uuid[])`,
+      [userIds]
+    );
+
+    // Index the results by user_id for O(1) lookup
+    const yardsByUser = {};
+    for (const row of yardsResult.rows) {
+      if (!yardsByUser[row.user_id]) yardsByUser[row.user_id] = [];
+      yardsByUser[row.user_id].push({
+        id: row.yard_id,
+        yard_name: row.yard_name,
+        location: row.location,
+        status: row.status,
+      });
+    }
+
+    const zonesByUser = {};
+    for (const row of zonesResult.rows) {
+      if (!zonesByUser[row.user_id]) zonesByUser[row.user_id] = [];
+      zonesByUser[row.user_id].push(row.zone_name);
+    }
+
+    const divisionsByUser = {};
+    for (const row of divisionsResult.rows) {
+      if (!divisionsByUser[row.user_id]) divisionsByUser[row.user_id] = [];
+      divisionsByUser[row.user_id].push(row.division_name);
+    }
+
+    // Assemble the final response using the in-memory index
+    const users = usersResult.rows.map(user => ({
+      id: user.id,
+      fullName: user.full_name,
+      employeeId: user.employee_id,
+      email: user.email,
+      designation: user.designation,
+      role: user.role,
+      isActive: user.is_active,
+      createdAt: user.created_at,
+      profile_pic_url: user.profile_pic_url,
+      assignedYards: yardsByUser[user.id] || [],
+      assignedZones: zonesByUser[user.id] || [],
+      assignedDivisions: divisionsByUser[user.id] || [],
     }));
 
     res.status(200).json({ users });

@@ -94,7 +94,7 @@ class ApiService {
           'loginId': loginId,
           'password': password,
         }),
-      ).timeout(const Duration(seconds: 120));
+      ).timeout(const Duration(seconds: 30));
 
       final data = jsonDecode(response.body);
 
@@ -105,8 +105,11 @@ class ApiService {
       } else {
         return {'success': false, 'message': data['message'] ?? 'Login failed'};
       }
-    } catch (e) {
-      return {'success': false, 'message': 'Network error: $e'};
+    } on Exception catch (e) {
+      if (e.toString().contains('TimeoutException')) {
+        return {'success': false, 'message': 'Login timed out. Server may be slow — please try again.'};
+      }
+      return {'success': false, 'message': 'Network error. Please check your connection.'};
     }
   }
 
@@ -116,7 +119,7 @@ class ApiService {
       final response = await http.get(
         Uri.parse('$baseUrl/auth/me'),
         headers: _authHeaders(),
-      );
+      ).timeout(const Duration(seconds: 30));
 
       final data = jsonDecode(response.body);
 
@@ -136,7 +139,7 @@ class ApiService {
       final response = await http.get(
         Uri.parse('$baseUrl/yards'),
         headers: _authHeaders(),
-      );
+      ).timeout(const Duration(seconds: 30));
 
       final data = jsonDecode(response.body);
 
@@ -156,7 +159,7 @@ class ApiService {
       final response = await http.get(
         Uri.parse('$baseUrl/auth/users'),
         headers: _authHeaders(),
-      );
+      ).timeout(const Duration(seconds: 30));
 
       final data = jsonDecode(response.body);
 
@@ -357,7 +360,7 @@ class ApiService {
       final response = await http.get(
         Uri.parse('$baseUrl/dashboard/summary'),
         headers: _authHeaders(),
-      );
+      ).timeout(const Duration(seconds: 30));
 
       final data = jsonDecode(response.body);
 
@@ -377,7 +380,7 @@ class ApiService {
       final response = await http.get(
         Uri.parse('$baseUrl/devices'),
         headers: _authHeaders(),
-      );
+      ).timeout(const Duration(seconds: 30));
 
       final data = jsonDecode(response.body);
 
@@ -557,7 +560,7 @@ class ApiService {
       if (yard != null && yard.isNotEmpty) query += '&yard=${Uri.encodeComponent(yard)}';
       if (pilot != null && pilot.isNotEmpty) query += '&pilot=${Uri.encodeComponent(pilot)}';
       
-      final response = await http.get(Uri.parse('$baseUrl/sessions?$query'), headers: _authHeaders());
+      final response = await http.get(Uri.parse('$baseUrl/sessions?$query'), headers: _authHeaders()).timeout(const Duration(seconds: 30));
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) return {'success': true, 'data': data};
       return {'success': false, 'message': data['message'] ?? 'Failed to load sessions'};

@@ -39,7 +39,7 @@ class VideoSplashScreen extends StatefulWidget {
 }
 
 class _VideoSplashScreenState extends State<VideoSplashScreen> {
-  late VideoPlayerController _controller;
+  VideoPlayerController? _controller;
   bool _hasNavigated = false;
 
   @override
@@ -54,10 +54,10 @@ class _VideoSplashScreenState extends State<VideoSplashScreen> {
     // 1. Initialize and play the video
     _controller = VideoPlayerController.asset('Splash_screen.mp4');
     try {
-      await _controller.initialize();
-      _controller.setVolume(0.0);
+      await _controller!.initialize();
+      _controller!.setVolume(0.0);
       if (mounted) setState(() {});
-      _controller.play();
+      _controller!.play();
     } catch (e) {
       // Ignore video errors and proceed to load
     }
@@ -91,7 +91,7 @@ class _VideoSplashScreenState extends State<VideoSplashScreen> {
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -100,13 +100,13 @@ class _VideoSplashScreenState extends State<VideoSplashScreen> {
     return Scaffold(
       backgroundColor: AppTheme.primaryColor, // Navy blue instead of black
       body: SizedBox.expand(
-        child: _controller.value.isInitialized
+        child: _controller != null && _controller!.value.isInitialized
             ? FittedBox(
                 fit: BoxFit.cover,
                 child: SizedBox(
-                  width: _controller.value.size.width,
-                  height: _controller.value.size.height,
-                  child: VideoPlayer(_controller),
+                  width: _controller!.value.size.width,
+                  height: _controller!.value.size.height,
+                  child: VideoPlayer(_controller!),
                 ),
               )
             : Center(

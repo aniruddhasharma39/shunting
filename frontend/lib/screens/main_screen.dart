@@ -76,9 +76,11 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     final screens = _getScreens();
     final navItems = _getNavItems();
+    // Guard: clamp index to prevent RangeError if session role changed mid-session
+    final safeIndex = _currentIndex.clamp(0, screens.length - 1);
 
     return Scaffold(
-      body: screens[_currentIndex],
+      body: screens[safeIndex],
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           boxShadow: [
@@ -90,7 +92,7 @@ class _MainScreenState extends State<MainScreen> {
           ],
         ),
         child: BottomNavigationBar(
-          currentIndex: _currentIndex,
+          currentIndex: safeIndex,
           onTap: (index) {
             setState(() {
               _currentIndex = index;

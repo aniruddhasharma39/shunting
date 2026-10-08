@@ -23,6 +23,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? _dashboardData;
   bool _isLoading = true;
   String? _errorMessage;
+  bool _isFetching = false; // In-flight guard to prevent request pile-up
   Timer? _liveRefreshTimer;
 
   @override
@@ -40,15 +41,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _startLiveRefreshTimer() {
     _liveRefreshTimer?.cancel();
-    // Silently refresh live dashboard summary every 2.5 seconds without unmounting/flashing the UI
-    _liveRefreshTimer = Timer.periodic(const Duration(milliseconds: 2500), (_) {
-      if (mounted) {
+    // Silently refresh live dashboard summary every 5 seconds.
+    // 5s interval prevents request pile-up when EC2/RDS is under load.
+    _liveRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted && !_isFetching) {
         _fetchDashboardData(isInitial: false);
       }
     });
   }
 
   Future<void> _fetchDashboardData({bool isInitial = false}) async {
+    if (_isFetching) return; // Prevent overlapping requests
+    _isFetching = true;
+
     if (isInitial && _dashboardData == null) {
       setState(() {
         _isLoading = true;
@@ -85,6 +90,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _isLoading = false;
         });
       }
+    } finally {
+      _isFetching = false;
     }
   }
 
