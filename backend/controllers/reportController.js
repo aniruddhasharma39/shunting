@@ -59,7 +59,11 @@ async function getReportData(reportType, filters, user) {
     `;
     let params = [];
     
-    // Removed role filtering per user request to show all history
+    // Restrict report data to the shunter's own logs
+    if (user && user.role === 'shunter') {
+       params.push(user.id);
+       query += ` AND da.employee_id = $${params.length}`;
+    }
     
     if (filters && filters.fromDate && filters.toDate) {
        params.push(filters.fromDate);
@@ -103,7 +107,11 @@ async function getReportData(reportType, filters, user) {
     let params = [];
     let conditions = [];
     
-    // Removed role filtering per user request to show all sessions
+    // Restrict report data to the shunter's own logs
+    if (user && user.role === 'shunter') {
+       params.push(user.id);
+       conditions.push(`da.employee_id = $${params.length}`);
+    }
     
     if (yardId) {
        params.push(yardId);

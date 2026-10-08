@@ -420,30 +420,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
           runSpacing: 8,
           alignment: WrapAlignment.spaceEvenly,
           children: [
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const IssueReturnScreen()));
-              },
-              icon: const Icon(Icons.output, size: 16, color: Colors.white),
-              label: const Text('Issue', style: TextStyle(color: Colors.white)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            if (!session.isShunter)
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const IssueReturnScreen()));
+                },
+                icon: const Icon(Icons.output, size: 16, color: Colors.white),
+                label: const Text('Issue', style: TextStyle(color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
               ),
-            ),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const IssueReturnScreen(initialIndex: 1)));
-              },
-              icon: const Icon(Icons.keyboard_return, size: 16, color: Colors.white),
-              label: const Text('Return', style: TextStyle(color: Colors.white)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blueAccent,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            if (!session.isShunter)
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const IssueReturnScreen(initialIndex: 1)));
+                },
+                icon: const Icon(Icons.keyboard_return, size: 16, color: Colors.white),
+                label: const Text('Return', style: TextStyle(color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
               ),
-            ),
             if (session.canManageDevices)
               ElevatedButton.icon(
                 onPressed: () {
