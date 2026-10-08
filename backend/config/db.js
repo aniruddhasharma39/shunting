@@ -13,7 +13,9 @@ const pool = new Pool(
         database: process.env.DB_NAME,
         password: process.env.DB_PASSWORD,
         port: process.env.DB_PORT || 5432,
-        ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
+        ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+        connectionTimeoutMillis: 10000, // Fail fast if RDS is unreachable (10s)
+        idleTimeoutMillis: 30000,       // Close idle connections after 30s to prevent stale drops
       }
 );
 
