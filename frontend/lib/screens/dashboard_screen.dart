@@ -436,7 +436,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (!session.isShunter)
               ElevatedButton.icon(
                 onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const IssueReturnScreen(initialIndex: 1)));
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const IssueReturnScreen(initialIndex: 2)));
                 },
                 icon: const Icon(Icons.keyboard_return, size: 16, color: Colors.white),
                 label: const Text('Return', style: TextStyle(color: Colors.white)),
