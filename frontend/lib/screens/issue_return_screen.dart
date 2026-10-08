@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_drawer.dart';
 import '../services/api_service.dart';
+import '../services/user_session.dart';
 import 'device_issue_history_screen.dart';
 
 class IssueReturnScreen extends StatefulWidget {
@@ -35,8 +36,18 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
         final allDevices = devicesResult['data'] as List<dynamic>;
         
         // Populate active sessions from issued devices directly!
-        // This fixes the bug where devices without telemetry were hidden.
-        _activeAssignments = allDevices.where((d) => d['is_issued'] == true).map((d) {
+        final userSession = UserSession();
+        _activeAssignments = allDevices.where((d) {
+          if (d['is_issued'] != true) return false;
+          if (userSession.isShunter) {
+            final holderName = d['active_holder_name']?.toString();
+            final holderId = d['active_holder_employee_id']?.toString();
+            if (holderId != userSession.employeeId && holderName != userSession.fullName) {
+              return false;
+            }
+          }
+          return true;
+        }).map((d) {
           return {
             'id': d['active_assignment_id'],
             'ldDevice': d['device_code'] ?? d['device_id'],
@@ -67,6 +78,41 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final userSession = UserSession();
+
+    if (userSession.isShunter) {
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundColor,
+        drawer: const AppDrawer(),
+        appBar: AppBar(
+          title: const Text('My Devices', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          iconTheme: const IconThemeData(color: Colors.white),
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF1A2A42), Color(0xFF0F172A)],
+              ),
+            ),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.history),
+              tooltip: 'Device History',
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const DeviceIssueHistoryScreen()));
+              },
+            ),
+            IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchData)
+          ],
+        ),
+        body: _isLoading 
+            ? const Center(child: CircularProgressIndicator()) 
+            : _buildReturnTab(),
+      );
+    }
+
     return DefaultTabController(
       length: 2,
       initialIndex: widget.initialIndex,
@@ -358,19 +404,20 @@ class _IssueReturnScreenState extends State<IssueReturnScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => _showReturnDialog(assignment),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppTheme.primaryColor,
-                      side: const BorderSide(color: AppTheme.primaryColor),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                if (!UserSession().isShunter)
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => _showReturnDialog(assignment),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppTheme.primaryColor,
+                        side: const BorderSide(color: AppTheme.primaryColor),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: const Text('PROCESS RETURN', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
-                    child: const Text('PROCESS RETURN', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
-                ),
               ],
             ),
           ),

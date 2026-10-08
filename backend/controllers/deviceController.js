@@ -455,7 +455,11 @@ const getDeviceAssignments = async (req, res) => {
       params.push(...deviceList);
     }
     
-    // Removed role-based filtering per user request to show all device assignments for all levels
+    // Role-based filtering for Shunters
+    if (req.user && req.user.role === 'shunter') {
+      params.push(req.user.id);
+      query += ` AND da.employee_id = $${params.length}`;
+    }
 
     query += ' ORDER BY da.issued_at DESC LIMIT 500';
 

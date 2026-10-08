@@ -186,8 +186,8 @@ class AppDrawer extends StatelessWidget {
           if (session.canIssueReturn)
             _buildDrawerItem(
               context: context,
-              icon: Icons.swap_horiz,
-              title: 'Issue & Return',
+              icon: session.isShunter ? Icons.devices : Icons.swap_horiz,
+              title: session.isShunter ? 'My Devices' : 'Issue & Return',
               destination: const IssueReturnScreen(),
             ),
 
